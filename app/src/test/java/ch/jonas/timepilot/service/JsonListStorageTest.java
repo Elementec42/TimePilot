@@ -21,7 +21,7 @@ class JsonListStorageTest {
     void savesAndLoadsGenericTaskListAsJson() throws Exception {
         Path file = tempDir.resolve("tasks.json");
         JsonListStorage<Task> storage = new JsonListStorage<>(Task.class);
-        Task task = new Task("Learn JSON", "Persist generic lists", LocalDateTime.of(2026, 5, 22, 9, 30));
+        Task task = new Task("Learn JSON", "Persist generic lists", LocalDateTime.of(2026, 5, 22, 9, 30), 90);
 
         storage.saveList(List.of(task), file);
         List<Task> loadedTasks = storage.loadList(file);
@@ -30,6 +30,7 @@ class JsonListStorageTest {
         assertEquals("Learn JSON", loadedTasks.getFirst().getTask());
         assertEquals("Persist generic lists", loadedTasks.getFirst().getDescription());
         assertEquals(LocalDateTime.of(2026, 5, 22, 9, 30), loadedTasks.getFirst().getDueTime());
+        assertEquals(90, loadedTasks.getFirst().getExpectedDurationMinutes());
         assertFalse(loadedTasks.getFirst().isCompleted());
         assertFalse(Files.readString(file).isBlank());
     }
