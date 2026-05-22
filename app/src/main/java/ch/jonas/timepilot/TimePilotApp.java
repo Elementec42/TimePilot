@@ -231,6 +231,9 @@ public class TimePilotApp extends Application {
         openOnlyCheckBox = new CheckBox("Open tasks only");
         openOnlyCheckBox.selectedProperty().addListener((observable, oldValue, newValue) -> refreshTasks());
 
+        Button todayButton = new Button("Today Plan");
+        todayButton.setOnAction(event -> openTodayPlanWindow());
+
         Button calendarButton = new Button("Calendar");
         calendarButton.setOnAction(event -> openCalendarWindow());
 
@@ -249,7 +252,7 @@ public class TimePilotApp extends Application {
         HBox spacer = new HBox();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
-        HBox actions = new HBox(10, openOnlyCheckBox, spacer, calendarButton, timerButton, editButton, toggleCompletedButton, deleteButton);
+        HBox actions = new HBox(10, openOnlyCheckBox, spacer, todayButton, calendarButton, timerButton, editButton, toggleCompletedButton, deleteButton);
         actions.setAlignment(Pos.CENTER_LEFT);
         actions.setPadding(new Insets(18, 0, 0, 0));
         return actions;
@@ -446,6 +449,102 @@ public class TimePilotApp extends Application {
 
         taskService.removeTask(selectedTask);
         refreshTasks();
+    }
+
+
+    private void openTodayPlanWindow() {
+        LocalDate today = LocalDate.now();
+        Stage todayStage = new Stage();
+
+        Label titleLabel = new Label("Today Plan");
+        titleLabel.setStyle("-fx-font-size: 24px; -fx-font-weight: 700; -fx-text-fill: #172033;");
+
+        Label dateLabel = new Label(today.format(DATE_HEADER_FORMATTER));
+        dateLabel.setStyle("-fx-font-size: 14px; -fx-text-fill: #5d667a;");
+
+        VBox scheduledTasks = createTodayTaskSection("Scheduled Today", taskService.getAllTasks().stream()
+                .filter(task -> task.getDueTime() != null)
+                .filter(task -> task.getDueTime().toLocalDate().equals(today))
+                .sorted((first, second) -> first.getDueTime().compareTo(second.getDueTime()))
+                .toList());
+
+        VBox overdueTasks = createTodayTaskSection("Overdue Open Tasks", taskService.getAllTasks().stream()
+                .filter(task -> !task.isCompleted())
+                .filter(task -> task.getDueTime() != null)
+                .filter(task -> task.getDueTime().toLocalDate().isBefore(today))
+                .sorted((first, second) -> first.getDueTime().compareTo(second.getDueTime()))
+                .toList());
+
+        Button closeButton = new Button("Close");
+        closeButton.setOnAction(event -> todayStage.close());
+
+        VBox content = new VBox(16, titleLabel, dateLabel, scheduledTasks, overdueTasks, closeButton);
+        content.setPadding(new Insets(20));
+        content.setStyle("-fx-background-color: #f6f7fb;");
+
+        ScrollPane scrollPane = new ScrollPane(content);
+        scrollPane.setFitToWidth(true);
+        scrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        scrollPane.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
+
+        todayStage.setTitle("TimePilot Today Plan");
+        todayStage.setMinWidth(560);
+        todayStage.setMinHeight(520);
+        todayStage.setScene(new Scene(scrollPane, 680, 620));
+        todayStage.show();
+    }
+
+    private VBox createTodayTaskSection(String title, List<Task> tasks) {
+        Label sectionTitle = new Label(title);
+        sectionTitle.setStyle("-fx-font-size: 16px; -fx-font-weight: 700; -fx-text-fill: #172033;");
+
+        VBox taskList = new VBox(8);
+        if (tasks.isEmpty()) {
+            Label emptyLabel = new Label("No tasks");
+            emptyLabel.setStyle("-fx-text-fill: #7b8495;");
+            taskList.getChildren().add(emptyLabel);
+        } else {
+            for (Task task : tasks) {
+                taskList.getChildren().add(createTodayTaskRow(task));
+            }
+        }
+
+        VBox section = new VBox(10, sectionTitle, taskList);
+        section.setPadding(new Insets(14));
+        section.setStyle("-fx-background-color: #ffffff; -fx-border-color: #d8dee9; -fx-border-radius: 8px; -fx-background-radius: 8px;");
+        return section;
+    }
+
+    private VBox createTodayTaskRow(Task task) {
+        Label titleLabel = new Label(formatTodayTaskTitle(task));
+        titleLabel.setWrapText(true);
+        titleLabel.setStyle("-fx-font-weight: 700; -fx-text-fill: #172033;");
+
+        Label detailsLabel = new Label(task.getTaskType() + " | " + formatDuration(task.getExpectedDurationMinutes()) + " | " + (task.isCompleted() ? "Done" : task.isStarted() ? "Started" : "Open"));
+        detailsLabel.setWrapText(true);
+        detailsLabel.setStyle("-fx-text-fill: #5d667a;");
+
+        String goals = formatGoals(task.getGoals());
+        VBox row = goals.isEmpty()
+                ? new VBox(3, titleLabel, detailsLabel)
+                : new VBox(3, titleLabel, detailsLabel, createTodayGoalsLabel(goals));
+        row.setPadding(new Insets(8));
+        row.setStyle("-fx-background-color: #f8fafc; -fx-border-color: #edf1f7; -fx-background-radius: 6px; -fx-border-radius: 6px;");
+        return row;
+    }
+
+    private Label createTodayGoalsLabel(String goals) {
+        Label goalsLabel = new Label(goals);
+        goalsLabel.setWrapText(true);
+        goalsLabel.setStyle("-fx-text-fill: #3a4252;");
+        return goalsLabel;
+    }
+
+    private String formatTodayTaskTitle(Task task) {
+        if (task.getDueTime() == null) {
+            return task.getTask();
+        }
+        return task.getDueTime().format(DUE_TIME_FORMATTER) + " - " + task.getTask();
     }
 
     private void openTimerWindow() {
@@ -1003,6 +1102,8 @@ public class TimePilotApp extends Application {
         launch(args);
     }
 }
+
+
 
 
 
