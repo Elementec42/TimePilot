@@ -7,6 +7,8 @@ import java.time.LocalTime;
 import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -25,12 +27,15 @@ import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
+import javafx.scene.canvas.Canvas;
+import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.DatePicker;
 import javafx.scene.control.Label;
+import javafx.scene.control.OverrunStyle;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.SelectionMode;
 import javafx.scene.control.TableColumn;
@@ -40,11 +45,18 @@ import javafx.scene.control.TextField;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.ColumnConstraints;
 import javafx.scene.layout.GridPane;
+import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Pane;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.RowConstraints;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
+import javafx.scene.paint.Color;
+import javafx.scene.text.Font;
+import javafx.scene.text.FontWeight;
+import javafx.scene.text.TextAlignment;
+import javafx.geometry.VPos;
 import javafx.util.Duration;
 
 public class TimePilotApp extends Application {
@@ -54,6 +66,8 @@ public class TimePilotApp extends Application {
     private static final DateTimeFormatter WEEK_RANGE_FORMATTER = DateTimeFormatter.ofPattern("MMM d", Locale.ENGLISH);
     private static final DateTimeFormatter DATE_HEADER_FORMATTER = DateTimeFormatter.ofPattern("EEEE, MMM d, yyyy", Locale.ENGLISH);
     private static final DateTimeFormatter WEEK_DAY_HEADER_FORMATTER = DateTimeFormatter.ofPattern("EEE M/d", Locale.ENGLISH);
+    private static final int SCHEDULE_START_HOUR = 6;
+    private static final int SCHEDULE_END_HOUR = 22;
 
     private final TaskService taskService = new TaskService();
     private final ObservableList<Task> visibleTasks = FXCollections.observableArrayList();
@@ -135,13 +149,9 @@ public class TimePilotApp extends Application {
         durationColumn.setCellValueFactory(cell -> new ReadOnlyStringWrapper(formatDuration(cell.getValue().getExpectedDurationMinutes())));
         durationColumn.setMinWidth(95);
 
-        TableColumn<Task, CheckBox> startedColumn = new TableColumn<>("Started");
-        startedColumn.setCellValueFactory(cell -> new ReadOnlyObjectWrapper<>(createStartedCheckBox(cell.getValue())));
-        startedColumn.setMinWidth(80);
-
-        TableColumn<Task, CheckBox> completedColumn = new TableColumn<>("Done");
-        completedColumn.setCellValueFactory(cell -> new ReadOnlyObjectWrapper<>(createCompletedCheckBox(cell.getValue())));
-        completedColumn.setMinWidth(70);
+        TableColumn<Task, Button> statusColumn = new TableColumn<>("Status");
+        statusColumn.setCellValueFactory(cell -> new ReadOnlyObjectWrapper<>(createStatusButton(cell.getValue())));
+        statusColumn.setMinWidth(95);
 
         taskTable.getColumns().add(typeColumn);
         taskTable.getColumns().add(titleColumn);
@@ -149,8 +159,7 @@ public class TimePilotApp extends Application {
         taskTable.getColumns().add(goalsColumn);
         taskTable.getColumns().add(dueTimeColumn);
         taskTable.getColumns().add(durationColumn);
-        taskTable.getColumns().add(startedColumn);
-        taskTable.getColumns().add(completedColumn);
+        taskTable.getColumns().add(statusColumn);
         BorderPane.setMargin(taskTable, new Insets(0, 18, 0, 0));
         return taskTable;
     }
@@ -243,16 +252,13 @@ public class TimePilotApp extends Application {
         Button editButton = new Button("Edit");
         editButton.setOnAction(event -> editSelectedTask());
 
-        Button toggleCompletedButton = new Button("Toggle Done");
-        toggleCompletedButton.setOnAction(event -> toggleSelectedTaskCompleted());
-
         Button deleteButton = new Button("Delete");
         deleteButton.setOnAction(event -> deleteSelectedTask());
 
         HBox spacer = new HBox();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
-        HBox actions = new HBox(10, openOnlyCheckBox, spacer, todayButton, calendarButton, timerButton, editButton, toggleCompletedButton, deleteButton);
+        HBox actions = new HBox(10, openOnlyCheckBox, spacer, todayButton, calendarButton, timerButton, editButton, deleteButton);
         actions.setAlignment(Pos.CENTER_LEFT);
         actions.setPadding(new Insets(18, 0, 0, 0));
         return actions;
@@ -407,28 +413,51 @@ public class TimePilotApp extends Application {
         }
     }
 
-    private CheckBox createStartedCheckBox(Task task) {
-        CheckBox checkBox = new CheckBox();
-        checkBox.setSelected(task.isStarted());
-        checkBox.setOnAction(event -> {
-            task.setStarted(checkBox.isSelected());
-            taskService.saveTasks();
-        });
-        return checkBox;
-    }
-
-    private CheckBox createCompletedCheckBox(Task task) {
-        CheckBox checkBox = new CheckBox();
-        checkBox.setSelected(task.isCompleted());
-        checkBox.setOnAction(event -> {
-            task.setCompleted(checkBox.isSelected());
+    private Button createStatusButton(Task task) {
+        Button statusButton = new Button(statusText(task));
+        statusButton.setMaxWidth(Double.MAX_VALUE);
+        statusButton.setStyle(statusStyle(task));
+        statusButton.setOnAction(event -> {
+            advanceTaskStatus(task);
             taskService.saveTasks();
             refreshTasks();
             taskTable.getSelectionModel().select(task);
         });
-        return checkBox;
+        return statusButton;
     }
 
+    private void advanceTaskStatus(Task task) {
+        if (task.isCompleted()) {
+            task.setCompleted(false);
+            task.setStarted(false);
+        } else if (task.isStarted()) {
+            task.setCompleted(true);
+            task.setStarted(true);
+        } else {
+            task.setStarted(true);
+            task.setCompleted(false);
+        }
+    }
+
+    private String statusText(Task task) {
+        if (task.isCompleted()) {
+            return "Done";
+        }
+        if (task.isStarted()) {
+            return "Started";
+        }
+        return "Open";
+    }
+
+    private String statusStyle(Task task) {
+        if (task.isCompleted()) {
+            return "-fx-background-color: #2f9e44; -fx-text-fill: white; -fx-font-weight: 700;";
+        }
+        if (task.isStarted()) {
+            return "-fx-background-color: #f2c94c; -fx-text-fill: #172033; -fx-font-weight: 700;";
+        }
+        return "-fx-background-color: #d64545; -fx-text-fill: white; -fx-font-weight: 700;";
+    }
     private void toggleSelectedTaskCompleted() {
         Task selectedTask = taskTable.getSelectionModel().getSelectedItem();
         if (selectedTask == null) {
@@ -713,21 +742,28 @@ public class TimePilotApp extends Application {
         LocalDate currentDate = LocalDate.now();
         BorderPane root = new BorderPane();
         root.setPadding(new Insets(20));
+        root.setMinSize(0, 0);
         root.setStyle("-fx-background-color: #f6f7fb;");
 
         renderCalendar(root, currentDate, "month", calendarStage);
 
         Scene scene = new Scene(root, 1200, 800);
         calendarStage.setTitle("TimePilot Calendar");
-        calendarStage.setMinWidth(980);
-        calendarStage.setMinHeight(680);
+        calendarStage.setMinWidth(640);
+        calendarStage.setMinHeight(420);
         calendarStage.setScene(scene);
         calendarStage.show();
     }
 
     private void renderCalendar(BorderPane root, LocalDate date, String view, Stage stage) {
+        boolean weekView = "week".equals(view);
+        root.setPadding(weekView ? new Insets(10) : new Insets(20));
+
         Label periodLabel = new Label(formatCalendarPeriod(date, view));
-        periodLabel.setStyle("-fx-font-size: 26px; -fx-font-weight: 700; -fx-text-fill: #172033;");
+        periodLabel.setMinSize(0, 0);
+        periodLabel.setMaxWidth(Double.MAX_VALUE);
+        periodLabel.setTextOverrun(OverrunStyle.ELLIPSIS);
+        periodLabel.setStyle(weekView ? "-fx-font-size: 18px; -fx-font-weight: 700; -fx-text-fill: #172033;" : "-fx-font-size: 26px; -fx-font-weight: 700; -fx-text-fill: #172033;");
 
         Button previousButton = new Button("Previous");
         previousButton.setOnAction(event -> renderCalendar(root, shiftCalendarDate(date, view, -1), view, stage));
@@ -753,10 +789,15 @@ public class TimePilotApp extends Application {
         Button closeButton = new Button("Close");
         closeButton.setOnAction(event -> stage.close());
 
-        HBox navigation = new HBox(10, previousButton, todayButton, nextButton, monthButton, weekButton, dayButton, closeButton);
-        HBox top = new HBox(18, periodLabel, navigation);
+        FlowPane navigation = new FlowPane(8, 6, previousButton, todayButton, nextButton, monthButton, weekButton, dayButton, closeButton);
+        navigation.setAlignment(Pos.CENTER_LEFT);
+        navigation.setMinSize(0, 0);
+        navigation.setMaxWidth(Double.MAX_VALUE);
+
+        VBox top = new VBox(weekView ? 6 : 10, periodLabel, navigation);
         top.setAlignment(Pos.CENTER_LEFT);
-        top.setPadding(new Insets(0, 0, 18, 0));
+        top.setPadding(new Insets(0, 0, weekView ? 8 : 18, 0));
+        top.setMinSize(0, 0);
         root.setTop(top);
 
         if ("day".equals(view)) {
@@ -803,98 +844,255 @@ public class TimePilotApp extends Application {
         return calendarGrid;
     }
 
-    private ScrollPane createWeekCalendarGrid(LocalDate date) {
+    private Pane createWeekCalendarGrid(LocalDate date) {
         LocalDate weekStart = startOfWeek(date);
-        GridPane weekGrid = new GridPane();
-        weekGrid.setHgap(1);
-        weekGrid.setVgap(1);
-        weekGrid.setStyle("-fx-background-color: #d8dee9;");
+        Canvas canvas = new Canvas();
+        Pane canvasPane = new Pane(canvas);
+        canvasPane.setMinSize(0, 0);
+        canvasPane.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
+        canvasPane.setStyle("-fx-background-color: #ffffff;");
 
-        ColumnConstraints timeColumn = new ColumnConstraints();
-        timeColumn.setMinWidth(76);
-        timeColumn.setPrefWidth(76);
-        weekGrid.getColumnConstraints().add(timeColumn);
+        canvas.widthProperty().bind(canvasPane.widthProperty());
+        canvas.heightProperty().bind(canvasPane.heightProperty());
+        canvas.widthProperty().addListener((observable, oldValue, newValue) -> drawWeekCalendar(canvas, date, weekStart));
+        canvas.heightProperty().addListener((observable, oldValue, newValue) -> drawWeekCalendar(canvas, date, weekStart));
+        drawWeekCalendar(canvas, date, weekStart);
 
-        for (int column = 0; column < 7; column++) {
-            ColumnConstraints dayColumn = new ColumnConstraints();
-            dayColumn.setPercentWidth(100.0 / 7.0);
-            dayColumn.setHgrow(Priority.ALWAYS);
-            weekGrid.getColumnConstraints().add(dayColumn);
+        return canvasPane;
+    }
+
+    private void drawWeekCalendar(Canvas canvas, LocalDate selectedDate, LocalDate weekStart) {
+        double width = canvas.getWidth();
+        double height = canvas.getHeight();
+        if (width <= 0 || height <= 0) {
+            return;
         }
 
-        RowConstraints headerRow = new RowConstraints();
-        headerRow.setMinHeight(42);
-        weekGrid.getRowConstraints().add(headerRow);
+        GraphicsContext graphics = canvas.getGraphicsContext2D();
+        graphics.clearRect(0, 0, width, height);
+        graphics.setFill(Color.web("#ffffff"));
+        graphics.fillRect(0, 0, width, height);
 
-        Label cornerLabel = new Label("Time");
-        cornerLabel.setMaxWidth(Double.MAX_VALUE);
-        cornerLabel.setAlignment(Pos.CENTER);
-        cornerLabel.setStyle("-fx-background-color: #edf1f7; -fx-font-weight: 700; -fx-text-fill: #3a4252;");
-        weekGrid.add(cornerLabel, 0, 0);
+        double timeColumnWidth = clamp(width * 0.08, 34, 58);
+        double headerHeight = clamp(height * 0.07, 20, 34);
+        double bodyHeight = Math.max(1, height - headerHeight);
+        double dayWidth = Math.max(1, (width - timeColumnWidth) / 7.0);
+        double hourHeight = bodyHeight / (SCHEDULE_END_HOUR - SCHEDULE_START_HOUR);
+        double smallFont = clamp(Math.min(dayWidth, hourHeight) * 0.28, 7, 10);
+        double headerFont = clamp(dayWidth * 0.08, 8, 12);
+
+        graphics.setFill(Color.web("#edf1f7"));
+        graphics.fillRect(0, 0, width, headerHeight);
+        graphics.setStroke(Color.web("#d8dee9"));
+        graphics.setLineWidth(1);
+        graphics.strokeRect(0.5, 0.5, width - 1, height - 1);
+
+        graphics.setTextAlign(TextAlignment.CENTER);
+        graphics.setTextBaseline(VPos.CENTER);
+        graphics.setFont(Font.font("System", FontWeight.BOLD, headerFont));
+        graphics.setFill(Color.web("#3a4252"));
+        graphics.fillText("Time", timeColumnWidth / 2, headerHeight / 2);
 
         for (int dayIndex = 0; dayIndex < 7; dayIndex++) {
             LocalDate day = weekStart.plusDays(dayIndex);
-            Label dayLabel = new Label(day.format(WEEK_DAY_HEADER_FORMATTER));
-            dayLabel.setMaxWidth(Double.MAX_VALUE);
-            dayLabel.setAlignment(Pos.CENTER);
-            dayLabel.setStyle(date.equals(day) ? "-fx-background-color: #dfeaff; -fx-font-weight: 700; -fx-text-fill: #172033;" : "-fx-background-color: #edf1f7; -fx-font-weight: 700; -fx-text-fill: #3a4252;");
-            weekGrid.add(dayLabel, dayIndex + 1, 0);
+            double x = timeColumnWidth + (dayIndex * dayWidth);
+            if (day.equals(selectedDate)) {
+                graphics.setFill(Color.web("#dfeaff"));
+                graphics.fillRect(x, 0, dayWidth, headerHeight);
+            }
+            graphics.setStroke(Color.web("#d8dee9"));
+            graphics.strokeLine(x, 0, x, height);
+            graphics.setFill(Color.web(day.equals(selectedDate) ? "#172033" : "#3a4252"));
+            graphics.fillText(day.format(WEEK_DAY_HEADER_FORMATTER), x + dayWidth / 2, headerHeight / 2);
         }
 
-        Map<LocalDate, Map<Integer, List<Task>>> tasksByDayAndHour = taskService.getAllTasks().stream()
+        graphics.setStroke(Color.web("#edf1f7"));
+        graphics.setFont(Font.font("System", FontWeight.BOLD, smallFont));
+        graphics.setTextAlign(TextAlignment.RIGHT);
+        graphics.setTextBaseline(VPos.TOP);
+        for (int hour = SCHEDULE_START_HOUR; hour <= SCHEDULE_END_HOUR; hour++) {
+            double y = headerHeight + ((hour - SCHEDULE_START_HOUR) * hourHeight);
+            graphics.setStroke(Color.web(hour == SCHEDULE_START_HOUR || hour == SCHEDULE_END_HOUR ? "#c9d2df" : "#edf1f7"));
+            graphics.strokeLine(0, y, width, y);
+            graphics.setFill(Color.web("#3a4252"));
+            graphics.fillText(String.format(Locale.ENGLISH, "%02d:00", hour), timeColumnWidth - 4, Math.min(y + 2, height - smallFont - 1));
+        }
+
+        Map<LocalDate, List<Task>> tasksByDay = taskService.getAllTasks().stream()
                 .filter(task -> task.getDueTime() != null)
                 .filter(task -> !task.getDueTime().toLocalDate().isBefore(weekStart))
                 .filter(task -> !task.getDueTime().toLocalDate().isAfter(weekStart.plusDays(6)))
-                .sorted((first, second) -> first.getDueTime().compareTo(second.getDueTime()))
-                .collect(Collectors.groupingBy(
-                        task -> task.getDueTime().toLocalDate(),
-                        Collectors.groupingBy(task -> task.getDueTime().getHour())));
+                .filter(this::isVisibleInWeekPlanner)
+                .sorted(Comparator.comparing(Task::getDueTime))
+                .collect(Collectors.groupingBy(task -> task.getDueTime().toLocalDate()));
 
-        for (int hour = 0; hour < 24; hour++) {
-            RowConstraints hourRow = new RowConstraints();
-            hourRow.setMinHeight(72);
-            hourRow.setVgrow(Priority.ALWAYS);
-            weekGrid.getRowConstraints().add(hourRow);
-
-            Label hourLabel = new Label(String.format(Locale.ENGLISH, "%02d:00", hour));
-            hourLabel.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
-            hourLabel.setAlignment(Pos.TOP_CENTER);
-            hourLabel.setPadding(new Insets(10, 4, 0, 4));
-            hourLabel.setStyle("-fx-background-color: #f8fafc; -fx-font-weight: 700; -fx-text-fill: #3a4252;");
-            weekGrid.add(hourLabel, 0, hour + 1);
-
-            for (int dayIndex = 0; dayIndex < 7; dayIndex++) {
-                LocalDate day = weekStart.plusDays(dayIndex);
-                List<Task> hourTasks = tasksByDayAndHour
-                        .getOrDefault(day, Map.of())
-                        .getOrDefault(hour, List.of());
-                weekGrid.add(createWeekHourCell(day, hourTasks), dayIndex + 1, hour + 1);
+        for (int dayIndex = 0; dayIndex < 7; dayIndex++) {
+            LocalDate day = weekStart.plusDays(dayIndex);
+            List<WeekTaskPlacement> placements = calculateWeekTaskPlacements(tasksByDay.getOrDefault(day, List.of()));
+            for (WeekTaskPlacement placement : placements) {
+                drawWeekTask(graphics, placement, weekStart, timeColumnWidth, headerHeight, dayWidth, hourHeight, height);
             }
         }
-
-        ScrollPane scrollPane = new ScrollPane(weekGrid);
-        scrollPane.setFitToWidth(true);
-        scrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
-        scrollPane.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
-        return scrollPane;
     }
 
-    private VBox createWeekHourCell(LocalDate date, List<Task> tasks) {
-        VBox taskList = new VBox(5);
-        taskList.setPadding(new Insets(6));
-        taskList.setMinHeight(72);
-        taskList.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
-        taskList.setStyle(date.equals(LocalDate.now()) ? "-fx-background-color: #fbfdff; -fx-border-color: #b8ccff;" : "-fx-background-color: #ffffff; -fx-border-color: #edf1f7;");
+    private boolean isVisibleInWeekPlanner(Task task) {
+        LocalTime time = task.getDueTime().toLocalTime();
+        return !time.isBefore(LocalTime.of(SCHEDULE_START_HOUR, 0)) && !time.isAfter(LocalTime.of(SCHEDULE_END_HOUR, 0));
+    }
 
-        for (Task task : tasks) {
-            Label taskLabel = new Label(formatCalendarTask(task));
-            taskLabel.setWrapText(true);
-            taskLabel.setMaxWidth(Double.MAX_VALUE);
-            taskLabel.setStyle("-fx-background-color: #e7f0ff; -fx-background-radius: 6px; -fx-padding: 5 7; -fx-text-fill: #172033;");
-            taskList.getChildren().add(taskLabel);
+    private List<WeekTaskPlacement> calculateWeekTaskPlacements(List<Task> tasks) {
+        List<Task> sortedTasks = tasks.stream()
+                .sorted(Comparator.comparing(Task::getDueTime))
+                .toList();
+        List<WeekTaskPlacement> placements = new ArrayList<>();
+        List<Task> overlapGroup = new ArrayList<>();
+        int groupEndMinute = -1;
+
+        for (Task task : sortedTasks) {
+            int startMinute = startMinuteOfDay(task);
+            int endMinute = endMinuteOfDay(task);
+            if (!overlapGroup.isEmpty() && startMinute >= groupEndMinute) {
+                placements.addAll(placeOverlapGroup(overlapGroup));
+                overlapGroup.clear();
+                groupEndMinute = -1;
+            }
+            overlapGroup.add(task);
+            groupEndMinute = Math.max(groupEndMinute, endMinute);
         }
 
-        return taskList;
+        if (!overlapGroup.isEmpty()) {
+            placements.addAll(placeOverlapGroup(overlapGroup));
+        }
+        return placements;
+    }
+
+    private List<WeekTaskPlacement> placeOverlapGroup(List<Task> tasks) {
+        List<WeekTaskPlacement> placements = new ArrayList<>();
+        List<Integer> laneEndMinutes = new ArrayList<>();
+
+        for (Task task : tasks) {
+            int startMinute = startMinuteOfDay(task);
+            int endMinute = endMinuteOfDay(task);
+            int lane = firstAvailableLane(laneEndMinutes, startMinute);
+            if (lane == laneEndMinutes.size()) {
+                laneEndMinutes.add(endMinute);
+            } else {
+                laneEndMinutes.set(lane, endMinute);
+            }
+            placements.add(new WeekTaskPlacement(task, lane));
+        }
+
+        int laneCount = Math.max(1, laneEndMinutes.size());
+        boolean overlaps = laneCount > 1;
+        placements.forEach(placement -> placement.setOverlapInfo(laneCount, overlaps));
+        return placements;
+    }
+
+    private int firstAvailableLane(List<Integer> laneEndMinutes, int startMinute) {
+        for (int lane = 0; lane < laneEndMinutes.size(); lane++) {
+            if (laneEndMinutes.get(lane) <= startMinute) {
+                return lane;
+            }
+        }
+        return laneEndMinutes.size();
+    }
+
+    private void drawWeekTask(GraphicsContext graphics, WeekTaskPlacement placement, LocalDate weekStart, double timeColumnWidth, double headerHeight, double dayWidth, double hourHeight, double height) {
+        Task task = placement.task();
+        LocalDate taskDate = task.getDueTime().toLocalDate();
+        LocalTime taskTime = task.getDueTime().toLocalTime();
+        int dayIndex = (int) (taskDate.toEpochDay() - weekStart.toEpochDay());
+        double startHour = taskTime.getHour() + (taskTime.getMinute() / 60.0);
+        double laneGap = placement.overlaps() ? 2 : 0;
+        double availableWidth = Math.max(2, dayWidth - 4);
+        double laneWidth = Math.max(2, (availableWidth - ((placement.laneCount() - 1) * laneGap)) / placement.laneCount());
+        double x = timeColumnWidth + (dayIndex * dayWidth) + 2 + (placement.lane() * (laneWidth + laneGap));
+        double y = headerHeight + ((startHour - SCHEDULE_START_HOUR) * hourHeight);
+        double durationMinutes = Math.max(15, task.getExpectedDurationMinutes());
+        double taskHeight = Math.max(7, (durationMinutes / 60.0) * hourHeight);
+        taskHeight = Math.min(taskHeight, Math.max(4, height - y - 2));
+        if (taskHeight <= 0) {
+            return;
+        }
+
+        graphics.setFill(task.isCompleted() ? Color.web("#d9f2df") : task.isStarted() ? Color.web("#fff1b8") : Color.web("#e7f0ff"));
+        graphics.fillRoundRect(x, y + 1, laneWidth, taskHeight, 5, 5);
+        graphics.setStroke(placement.overlaps() ? Color.web("#d64545") : task.isCompleted() ? Color.web("#2f9e44") : task.isStarted() ? Color.web("#d39e00") : Color.web("#7da9f8"));
+        graphics.setLineWidth(placement.overlaps() ? 2 : 1);
+        graphics.strokeRoundRect(x, y + 1, laneWidth, taskHeight, 5, 5);
+        graphics.setLineWidth(1);
+
+        if (placement.overlaps() && laneWidth >= 8) {
+            graphics.setFill(Color.web("#d64545"));
+            graphics.fillRoundRect(x + laneWidth - 5, y + 3, 3, Math.max(3, taskHeight - 5), 2, 2);
+        }
+
+        if (taskHeight >= 10 && laneWidth >= 16) {
+            double fontSize = clamp(Math.min(taskHeight * 0.48, laneWidth * 0.10), 6, 10);
+            graphics.setFont(Font.font("System", FontWeight.NORMAL, fontSize));
+            graphics.setFill(Color.web("#172033"));
+            graphics.setTextAlign(TextAlignment.LEFT);
+            graphics.setTextBaseline(VPos.TOP);
+            String taskText = (placement.overlaps() ? "! " : "") + taskTime.format(TIME_INPUT_FORMATTER) + " " + task.getTask();
+            graphics.fillText(shortenForWidth(taskText, laneWidth - 8, fontSize), x + 3, y + 3);
+        }
+    }
+
+    private int startMinuteOfDay(Task task) {
+        LocalTime time = task.getDueTime().toLocalTime();
+        return time.getHour() * 60 + time.getMinute();
+    }
+
+    private int endMinuteOfDay(Task task) {
+        return startMinuteOfDay(task) + Math.max(15, task.getExpectedDurationMinutes());
+    }
+
+    private static class WeekTaskPlacement {
+        private final Task task;
+        private final int lane;
+        private int laneCount = 1;
+        private boolean overlaps;
+
+        private WeekTaskPlacement(Task task, int lane) {
+            this.task = task;
+            this.lane = lane;
+        }
+
+        private Task task() {
+            return task;
+        }
+
+        private int lane() {
+            return lane;
+        }
+
+        private int laneCount() {
+            return laneCount;
+        }
+
+        private boolean overlaps() {
+            return overlaps;
+        }
+
+        private void setOverlapInfo(int laneCount, boolean overlaps) {
+            this.laneCount = laneCount;
+            this.overlaps = overlaps;
+        }
+    }
+
+    private String shortenForWidth(String text, double width, double fontSize) {
+        int maxCharacters = (int) Math.max(1, width / Math.max(1, fontSize * 0.55));
+        if (text.length() <= maxCharacters) {
+            return text;
+        }
+        if (maxCharacters <= 1) {
+            return ".";
+        }
+        return text.substring(0, maxCharacters - 1) + ".";
+    }
+
+    private double clamp(double value, double min, double max) {
+        return Math.max(min, Math.min(max, value));
     }
     private ScrollPane createDayScheduler(LocalDate date) {
         VBox schedule = new VBox(8);
@@ -906,7 +1104,7 @@ public class TimePilotApp extends Application {
                 .sorted((first, second) -> first.getDueTime().compareTo(second.getDueTime()))
                 .collect(Collectors.groupingBy(task -> task.getDueTime().getHour()));
 
-        for (int hour = 0; hour < 24; hour++) {
+        for (int hour = SCHEDULE_START_HOUR; hour <= SCHEDULE_END_HOUR; hour++) {
             schedule.getChildren().add(createHourSlot(hour, tasksByHour.getOrDefault(hour, List.of())));
         }
 
@@ -1039,6 +1237,11 @@ public class TimePilotApp extends Application {
         return time + task.getTask() + " (" + formatDuration(task.getExpectedDurationMinutes()) + ")";
     }
 
+
+    private String compactCalendarTask(Task task) {
+        String time = task.getDueTime() == null ? "" : task.getDueTime().toLocalTime().format(TIME_INPUT_FORMATTER) + " ";
+        return time + task.getTask();
+    }
     private List<String> parseGoals() {
         return goalsField.getText().lines()
                 .map(String::trim)
@@ -1102,6 +1305,18 @@ public class TimePilotApp extends Application {
         launch(args);
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
