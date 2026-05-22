@@ -57,6 +57,7 @@ public class TimePilotApp extends Application {
     private TableView<Task> taskTable;
     private TextField titleField;
     private TextArea descriptionField;
+    private TextArea goalsField;
     private DatePicker dueDatePicker;
     private TextField timeField;
     private TextField durationField;
@@ -108,6 +109,10 @@ public class TimePilotApp extends Application {
         descriptionColumn.setCellValueFactory(cell -> new ReadOnlyStringWrapper(cell.getValue().getDescription()));
         descriptionColumn.setMinWidth(240);
 
+        TableColumn<Task, String> goalsColumn = new TableColumn<>("Goals");
+        goalsColumn.setCellValueFactory(cell -> new ReadOnlyStringWrapper(formatGoals(cell.getValue().getGoals())));
+        goalsColumn.setMinWidth(160);
+
         TableColumn<Task, String> dueTimeColumn = new TableColumn<>("Due");
         dueTimeColumn.setCellValueFactory(cell -> new ReadOnlyStringWrapper(formatDueTime(cell.getValue().getDueTime())));
         dueTimeColumn.setMinWidth(130);
@@ -144,8 +149,13 @@ public class TimePilotApp extends Application {
 
         descriptionField = new TextArea();
         descriptionField.setPromptText("Description");
-        descriptionField.setPrefRowCount(5);
+        descriptionField.setPrefRowCount(4);
         descriptionField.setWrapText(true);
+
+        goalsField = new TextArea();
+        goalsField.setPromptText("Goals / subtopics, one per line");
+        goalsField.setPrefRowCount(4);
+        goalsField.setWrapText(true);
 
         dueDatePicker = new DatePicker(LocalDate.now());
         dueDatePicker.setMaxWidth(Double.MAX_VALUE);
@@ -179,7 +189,7 @@ public class TimePilotApp extends Application {
         addButton.setDefaultButton(true);
         addButton.setOnAction(event -> addTask());
 
-        VBox form = new VBox(12, formTitle, titleField, descriptionField, timeGrid, addButton);
+        VBox form = new VBox(12, formTitle, titleField, descriptionField, goalsField, timeGrid, addButton);
         form.setPadding(new Insets(16));
         form.setPrefWidth(320);
         form.setMaxWidth(340);
@@ -236,6 +246,7 @@ public class TimePilotApp extends Application {
         }
 
         Task task = new Task(title, descriptionField.getText().trim(), LocalDateTime.of(dueDate, time), durationMinutes);
+        task.setGoals(parseGoals());
         taskService.addTask(task);
         clearForm();
         refreshTasks();
@@ -637,6 +648,20 @@ public class TimePilotApp extends Application {
         return time + task.getTask() + " (" + formatDuration(task.getExpectedDurationMinutes()) + ")";
     }
 
+    private List<String> parseGoals() {
+        return goalsField.getText().lines()
+                .map(String::trim)
+                .filter(goal -> !goal.isEmpty())
+                .toList();
+    }
+
+    private String formatGoals(List<String> goals) {
+        if (goals == null || goals.isEmpty()) {
+            return "";
+        }
+        return String.join(", ", goals);
+    }
+
     private void refreshTasks() {
         List<Task> tasks = openOnlyCheckBox != null && openOnlyCheckBox.isSelected()
                 ? taskService.getOpenTasks()
@@ -647,6 +672,7 @@ public class TimePilotApp extends Application {
     private void clearForm() {
         titleField.clear();
         descriptionField.clear();
+        goalsField.clear();
         dueDatePicker.setValue(LocalDate.now());
         timeField.setText(LocalTime.now().format(TIME_INPUT_FORMATTER));
         durationField.clear();
@@ -684,5 +710,7 @@ public class TimePilotApp extends Application {
         launch(args);
     }
 }
+
+
 
 

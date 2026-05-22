@@ -24,6 +24,7 @@ class JsonListStorageTest {
         JsonListStorage<Task> storage = new JsonListStorage<>(Task.class);
         Task task = new Task("Learn JSON", "Persist generic lists", LocalDateTime.of(2026, 5, 22, 9, 30), 90);
         task.setStarted(true);
+        task.setGoals(List.of("Read docs", "Build demo"));
 
         storage.saveList(List.of(task), file);
         List<Task> loadedTasks = storage.loadList(file);
@@ -33,9 +34,12 @@ class JsonListStorageTest {
         assertEquals("Persist generic lists", loadedTasks.getFirst().getDescription());
         assertEquals(LocalDateTime.of(2026, 5, 22, 9, 30), loadedTasks.getFirst().getDueTime());
         assertEquals(90, loadedTasks.getFirst().getExpectedDurationMinutes());
+        assertEquals(List.of("Read docs", "Build demo"), loadedTasks.getFirst().getGoals());
         assertTrue(loadedTasks.getFirst().isStarted());
         assertFalse(loadedTasks.getFirst().isCompleted());
         assertFalse(Files.readString(file).isBlank());
     }
 }
+
+
 

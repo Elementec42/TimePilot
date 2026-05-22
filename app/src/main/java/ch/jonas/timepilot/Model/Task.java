@@ -1,12 +1,15 @@
 package ch.jonas.timepilot.model;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 public class Task {
     private String Task;
     private String description;
     private LocalDateTime dueTime;
     private int expectedDurationMinutes;
+    private List<String> goals;
     private boolean started;
     private boolean Completed;
 
@@ -19,6 +22,7 @@ public class Task {
         this.description = description;
         this.dueTime = dueTime;
         this.expectedDurationMinutes = expectedDurationMinutes;
+        this.goals = new ArrayList<>();
         this.started = false;
         this.Completed = false;
     }
@@ -53,6 +57,17 @@ public class Task {
 
     public void setExpectedDurationMinutes(int expectedDurationMinutes) {
         this.expectedDurationMinutes = expectedDurationMinutes;
+    }
+
+    public List<String> getGoals() {
+        if (goals == null) {
+            goals = new ArrayList<>();
+        }
+        return goals;
+    }
+
+    public void setGoals(List<String> goals) {
+        this.goals = goals == null ? new ArrayList<>() : new ArrayList<>(goals);
     }
 
     public boolean isStarted() {
