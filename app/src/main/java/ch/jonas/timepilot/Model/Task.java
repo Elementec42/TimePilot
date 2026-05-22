@@ -7,6 +7,7 @@ import java.util.List;
 public class Task {
     private String Task;
     private String description;
+    private String taskType;
     private LocalDateTime dueTime;
     private int expectedDurationMinutes;
     private List<String> goals;
@@ -20,6 +21,7 @@ public class Task {
     public Task(String Task, String description, LocalDateTime dueTime, int expectedDurationMinutes) {
         this.Task = Task;
         this.description = description;
+        this.taskType = "ToDo";
         this.dueTime = dueTime;
         this.expectedDurationMinutes = expectedDurationMinutes;
         this.goals = new ArrayList<>();
@@ -41,6 +43,14 @@ public class Task {
 
     public void setDescription(String description) {
         this.description = description;
+    }
+
+    public String getTaskType() {
+        return taskType == null || taskType.isBlank() ? "ToDo" : taskType;
+    }
+
+    public void setTaskType(String taskType) {
+        this.taskType = taskType == null || taskType.isBlank() ? "ToDo" : taskType;
     }
 
     public LocalDateTime getDueTime() {

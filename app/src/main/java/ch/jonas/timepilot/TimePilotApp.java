@@ -1,5 +1,6 @@
 package ch.jonas.timepilot;
 
+import java.awt.Toolkit;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -27,6 +28,7 @@ import javafx.scene.Scene;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
+import javafx.scene.control.ComboBox;
 import javafx.scene.control.DatePicker;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
@@ -58,6 +60,7 @@ public class TimePilotApp extends Application {
 
     private TableView<Task> taskTable;
     private TextField titleField;
+    private ComboBox<String> taskTypeBox;
     private TextArea descriptionField;
     private TextArea goalsField;
     private DatePicker dueDatePicker;
@@ -108,6 +111,10 @@ public class TimePilotApp extends Application {
         taskTable.getSelectionModel().setSelectionMode(SelectionMode.SINGLE);
         taskTable.setPlaceholder(new Label("No tasks"));
 
+        TableColumn<Task, String> typeColumn = new TableColumn<>("Type");
+        typeColumn.setCellValueFactory(cell -> new ReadOnlyStringWrapper(cell.getValue().getTaskType()));
+        typeColumn.setMinWidth(95);
+
         TableColumn<Task, String> titleColumn = new TableColumn<>("Title");
         titleColumn.setCellValueFactory(cell -> new ReadOnlyStringWrapper(cell.getValue().getTask()));
         titleColumn.setMinWidth(150);
@@ -136,6 +143,7 @@ public class TimePilotApp extends Application {
         completedColumn.setCellValueFactory(cell -> new ReadOnlyObjectWrapper<>(createCompletedCheckBox(cell.getValue())));
         completedColumn.setMinWidth(70);
 
+        taskTable.getColumns().add(typeColumn);
         taskTable.getColumns().add(titleColumn);
         taskTable.getColumns().add(descriptionColumn);
         taskTable.getColumns().add(goalsColumn);
@@ -150,6 +158,11 @@ public class TimePilotApp extends Application {
     private VBox createTaskForm() {
         formTitle = new Label("New Task");
         formTitle.setStyle("-fx-font-size: 18px; -fx-font-weight: 700; -fx-text-fill: #172033;");
+
+        taskTypeBox = new ComboBox<>();
+        taskTypeBox.getItems().addAll("ToDo", "Study Plan");
+        taskTypeBox.setValue("ToDo");
+        taskTypeBox.setMaxWidth(Double.MAX_VALUE);
 
         titleField = new TextField();
         titleField.setPromptText("Title");
@@ -206,7 +219,7 @@ public class TimePilotApp extends Application {
         HBox formButtons = new HBox(10, addButton, saveButton, cancelEditButton);
         setEditMode(false);
 
-        VBox form = new VBox(12, formTitle, titleField, descriptionField, goalsField, timeGrid, formButtons);
+        VBox form = new VBox(12, formTitle, taskTypeBox, titleField, descriptionField, goalsField, timeGrid, formButtons);
         form.setPadding(new Insets(16));
         form.setPrefWidth(320);
         form.setMaxWidth(340);
@@ -266,6 +279,7 @@ public class TimePilotApp extends Application {
         }
 
         Task task = new Task(title, descriptionField.getText().trim(), LocalDateTime.of(dueDate, time), durationMinutes);
+        task.setTaskType(taskTypeBox.getValue());
         task.setGoals(parseGoals());
         taskService.addTask(task);
         clearForm();
@@ -281,6 +295,7 @@ public class TimePilotApp extends Application {
         }
 
         editingTask = selectedTask;
+        taskTypeBox.setValue(selectedTask.getTaskType());
         titleField.setText(selectedTask.getTask());
         descriptionField.setText(selectedTask.getDescription());
         goalsField.setText(String.join(System.lineSeparator(), selectedTask.getGoals()));
@@ -322,6 +337,7 @@ public class TimePilotApp extends Application {
 
         Task savedTask = editingTask;
         savedTask.setTask(title);
+        savedTask.setTaskType(taskTypeBox.getValue());
         savedTask.setDescription(descriptionField.getText().trim());
         savedTask.setGoals(parseGoals());
         savedTask.setDueTime(LocalDateTime.of(dueDate, time));
@@ -578,11 +594,20 @@ public class TimePilotApp extends Application {
     }
 
     private void showTimerFinished(String message) {
+        playTimerAlertSound();
         Alert alert = new Alert(Alert.AlertType.INFORMATION);
         alert.setTitle("TimePilot Timer");
         alert.setHeaderText(null);
         alert.setContentText(message);
         alert.show();
+    }
+
+    private void playTimerAlertSound() {
+        Timeline alertSound = new Timeline(
+                new KeyFrame(Duration.ZERO, event -> Toolkit.getDefaultToolkit().beep()),
+                new KeyFrame(Duration.millis(350), event -> Toolkit.getDefaultToolkit().beep()),
+                new KeyFrame(Duration.millis(700), event -> Toolkit.getDefaultToolkit().beep()));
+        alertSound.play();
     }
     private void openCalendarWindow() {
         Stage calendarStage = new Stage();
@@ -937,6 +962,7 @@ public class TimePilotApp extends Application {
     }
 
     private void clearForm() {
+        taskTypeBox.setValue("ToDo");
         titleField.clear();
         descriptionField.clear();
         goalsField.clear();
@@ -977,6 +1003,10 @@ public class TimePilotApp extends Application {
         launch(args);
     }
 }
+
+
+
+
 
 
 

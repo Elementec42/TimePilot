@@ -23,6 +23,7 @@ class JsonListStorageTest {
         Path file = tempDir.resolve("tasks.json");
         JsonListStorage<Task> storage = new JsonListStorage<>(Task.class);
         Task task = new Task("Learn JSON", "Persist generic lists", LocalDateTime.of(2026, 5, 22, 9, 30), 90);
+        task.setTaskType("Study Plan");
         task.setStarted(true);
         task.setGoals(List.of("Read docs", "Build demo"));
 
@@ -32,6 +33,7 @@ class JsonListStorageTest {
         assertEquals(1, loadedTasks.size());
         assertEquals("Learn JSON", loadedTasks.getFirst().getTask());
         assertEquals("Persist generic lists", loadedTasks.getFirst().getDescription());
+        assertEquals("Study Plan", loadedTasks.getFirst().getTaskType());
         assertEquals(LocalDateTime.of(2026, 5, 22, 9, 30), loadedTasks.getFirst().getDueTime());
         assertEquals(90, loadedTasks.getFirst().getExpectedDurationMinutes());
         assertEquals(List.of("Read docs", "Build demo"), loadedTasks.getFirst().getGoals());
@@ -40,6 +42,7 @@ class JsonListStorageTest {
         assertFalse(Files.readString(file).isBlank());
     }
 }
+
 
 
 
