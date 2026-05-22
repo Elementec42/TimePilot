@@ -7,6 +7,7 @@ public class Task {
     private String description;
     private LocalDateTime dueTime;
     private int expectedDurationMinutes;
+    private boolean started;
     private boolean Completed;
 
     public Task(String Task, String description, LocalDateTime dueTime) {
@@ -18,6 +19,7 @@ public class Task {
         this.description = description;
         this.dueTime = dueTime;
         this.expectedDurationMinutes = expectedDurationMinutes;
+        this.started = false;
         this.Completed = false;
     }
 
@@ -51,6 +53,14 @@ public class Task {
 
     public void setExpectedDurationMinutes(int expectedDurationMinutes) {
         this.expectedDurationMinutes = expectedDurationMinutes;
+    }
+
+    public boolean isStarted() {
+        return started;
+    }
+
+    public void setStarted(boolean started) {
+        this.started = started;
     }
 
     public boolean isCompleted() {

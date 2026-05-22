@@ -14,6 +14,7 @@ import java.util.stream.Collectors;
 import ch.jonas.timepilot.model.Task;
 import ch.jonas.timepilot.service.TaskService;
 import javafx.application.Application;
+import javafx.beans.property.ReadOnlyObjectWrapper;
 import javafx.beans.property.ReadOnlyStringWrapper;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
@@ -111,15 +112,20 @@ public class TimePilotApp extends Application {
         durationColumn.setCellValueFactory(cell -> new ReadOnlyStringWrapper(formatDuration(cell.getValue().getExpectedDurationMinutes())));
         durationColumn.setMinWidth(95);
 
-        TableColumn<Task, String> statusColumn = new TableColumn<>("Status");
-        statusColumn.setCellValueFactory(cell -> new ReadOnlyStringWrapper(cell.getValue().isCompleted() ? "Done" : "Open"));
-        statusColumn.setMinWidth(80);
+        TableColumn<Task, CheckBox> startedColumn = new TableColumn<>("Started");
+        startedColumn.setCellValueFactory(cell -> new ReadOnlyObjectWrapper<>(createStartedCheckBox(cell.getValue())));
+        startedColumn.setMinWidth(80);
+
+        TableColumn<Task, CheckBox> completedColumn = new TableColumn<>("Done");
+        completedColumn.setCellValueFactory(cell -> new ReadOnlyObjectWrapper<>(createCompletedCheckBox(cell.getValue())));
+        completedColumn.setMinWidth(70);
 
         taskTable.getColumns().add(titleColumn);
         taskTable.getColumns().add(descriptionColumn);
         taskTable.getColumns().add(dueTimeColumn);
         taskTable.getColumns().add(durationColumn);
-        taskTable.getColumns().add(statusColumn);
+        taskTable.getColumns().add(startedColumn);
+        taskTable.getColumns().add(completedColumn);
         BorderPane.setMargin(taskTable, new Insets(0, 18, 0, 0));
         return taskTable;
     }
@@ -184,7 +190,7 @@ public class TimePilotApp extends Application {
         Button calendarButton = new Button("Calendar");
         calendarButton.setOnAction(event -> openCalendarWindow());
 
-        Button toggleCompletedButton = new Button("Toggle Status");
+        Button toggleCompletedButton = new Button("Toggle Done");
         toggleCompletedButton.setOnAction(event -> toggleSelectedTaskCompleted());
 
         Button deleteButton = new Button("Delete");
@@ -256,6 +262,28 @@ public class TimePilotApp extends Application {
             showWarning("Work duration must be a whole number of minutes.");
             return null;
         }
+    }
+
+    private CheckBox createStartedCheckBox(Task task) {
+        CheckBox checkBox = new CheckBox();
+        checkBox.setSelected(task.isStarted());
+        checkBox.setOnAction(event -> {
+            task.setStarted(checkBox.isSelected());
+            taskService.saveTasks();
+        });
+        return checkBox;
+    }
+
+    private CheckBox createCompletedCheckBox(Task task) {
+        CheckBox checkBox = new CheckBox();
+        checkBox.setSelected(task.isCompleted());
+        checkBox.setOnAction(event -> {
+            task.setCompleted(checkBox.isSelected());
+            taskService.saveTasks();
+            refreshTasks();
+            taskTable.getSelectionModel().select(task);
+        });
+        return checkBox;
     }
 
     private void toggleSelectedTaskCompleted() {

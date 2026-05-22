@@ -2,6 +2,7 @@ package ch.jonas.timepilot.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -22,6 +23,7 @@ class JsonListStorageTest {
         Path file = tempDir.resolve("tasks.json");
         JsonListStorage<Task> storage = new JsonListStorage<>(Task.class);
         Task task = new Task("Learn JSON", "Persist generic lists", LocalDateTime.of(2026, 5, 22, 9, 30), 90);
+        task.setStarted(true);
 
         storage.saveList(List.of(task), file);
         List<Task> loadedTasks = storage.loadList(file);
@@ -31,7 +33,9 @@ class JsonListStorageTest {
         assertEquals("Persist generic lists", loadedTasks.getFirst().getDescription());
         assertEquals(LocalDateTime.of(2026, 5, 22, 9, 30), loadedTasks.getFirst().getDueTime());
         assertEquals(90, loadedTasks.getFirst().getExpectedDurationMinutes());
+        assertTrue(loadedTasks.getFirst().isStarted());
         assertFalse(loadedTasks.getFirst().isCompleted());
         assertFalse(Files.readString(file).isBlank());
     }
 }
+
