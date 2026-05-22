@@ -13,6 +13,9 @@ import java.util.stream.Collectors;
 
 import ch.jonas.timepilot.model.Task;
 import ch.jonas.timepilot.service.TaskService;
+import javafx.animation.Animation;
+import javafx.animation.KeyFrame;
+import javafx.animation.Timeline;
 import javafx.application.Application;
 import javafx.beans.property.ReadOnlyObjectWrapper;
 import javafx.beans.property.ReadOnlyStringWrapper;
@@ -40,6 +43,7 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.RowConstraints;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
+import javafx.util.Duration;
 
 public class TimePilotApp extends Application {
     private static final DateTimeFormatter DUE_TIME_FORMATTER = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
@@ -190,6 +194,9 @@ public class TimePilotApp extends Application {
         Button calendarButton = new Button("Calendar");
         calendarButton.setOnAction(event -> openCalendarWindow());
 
+        Button timerButton = new Button("Timer");
+        timerButton.setOnAction(event -> openTimerWindow());
+
         Button toggleCompletedButton = new Button("Toggle Done");
         toggleCompletedButton.setOnAction(event -> toggleSelectedTaskCompleted());
 
@@ -199,7 +206,7 @@ public class TimePilotApp extends Application {
         HBox spacer = new HBox();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
-        HBox actions = new HBox(10, openOnlyCheckBox, spacer, calendarButton, toggleCompletedButton, deleteButton);
+        HBox actions = new HBox(10, openOnlyCheckBox, spacer, calendarButton, timerButton, toggleCompletedButton, deleteButton);
         actions.setAlignment(Pos.CENTER_LEFT);
         actions.setPadding(new Insets(18, 0, 0, 0));
         return actions;
@@ -308,6 +315,158 @@ public class TimePilotApp extends Application {
         refreshTasks();
     }
 
+    private void openTimerWindow() {
+        Stage timerStage = new Stage();
+
+        Label titleLabel = new Label("Focus Timer");
+        titleLabel.setStyle("-fx-font-size: 24px; -fx-font-weight: 700; -fx-text-fill: #172033;");
+
+        Label modeLabel = new Label("Work");
+        modeLabel.setStyle("-fx-font-size: 16px; -fx-font-weight: 700; -fx-text-fill: #3a4252;");
+
+        Label timeLabel = new Label(formatTimerTime(25 * 60));
+        timeLabel.setAlignment(Pos.CENTER);
+        timeLabel.setMaxWidth(Double.MAX_VALUE);
+        timeLabel.setStyle("-fx-font-size: 56px; -fx-font-weight: 700; -fx-text-fill: #172033;");
+
+        TextField workMinutesField = new TextField("25");
+        workMinutesField.setPromptText("Minutes");
+        TextField breakMinutesField = new TextField("5");
+        breakMinutesField.setPromptText("Minutes");
+
+        GridPane settingsGrid = new GridPane();
+        settingsGrid.setHgap(10);
+        settingsGrid.setVgap(8);
+        settingsGrid.add(new Label("Work minutes"), 0, 0);
+        settingsGrid.add(workMinutesField, 1, 0);
+        settingsGrid.add(new Label("Break minutes"), 0, 1);
+        settingsGrid.add(breakMinutesField, 1, 1);
+        ColumnConstraints settingsLabelColumn = new ColumnConstraints();
+        settingsLabelColumn.setMinWidth(110);
+        ColumnConstraints settingsInputColumn = new ColumnConstraints();
+        settingsInputColumn.setHgrow(Priority.ALWAYS);
+        settingsGrid.getColumnConstraints().add(settingsLabelColumn);
+        settingsGrid.getColumnConstraints().add(settingsInputColumn);
+
+        int[] remainingSeconds = { 25 * 60 };
+        boolean[] workMode = { true };
+        Button startPauseButton = new Button("Start");
+        Button resetButton = new Button("Reset");
+        Button switchModeButton = new Button("Switch to Break");
+        Button closeButton = new Button("Close");
+
+        Runnable updateDisplay = () -> timeLabel.setText(formatTimerTime(remainingSeconds[0]));
+        java.util.function.Supplier<Integer> selectedDuration = () -> parseTimerMinutes(
+                workMode[0] ? workMinutesField : breakMinutesField,
+                workMode[0] ? "work" : "break");
+
+        Timeline timeline = new Timeline();
+        timeline.setCycleCount(Animation.INDEFINITE);
+        timeline.getKeyFrames().add(new KeyFrame(Duration.seconds(1), event -> {
+            if (remainingSeconds[0] > 0) {
+                remainingSeconds[0]--;
+            }
+            updateDisplay.run();
+
+            if (remainingSeconds[0] == 0) {
+                timeline.stop();
+                startPauseButton.setText("Start");
+                showTimerFinished(workMode[0] ? "Work time finished." : "Break finished.");
+            }
+        }));
+
+        startPauseButton.setOnAction(event -> {
+            if (timeline.getStatus() == Animation.Status.RUNNING) {
+                timeline.stop();
+                startPauseButton.setText("Start");
+                return;
+            }
+
+            if (remainingSeconds[0] <= 0) {
+                Integer minutes = selectedDuration.get();
+                if (minutes == null) {
+                    return;
+                }
+                remainingSeconds[0] = minutes * 60;
+                updateDisplay.run();
+            }
+
+            timeline.play();
+            startPauseButton.setText("Pause");
+        });
+
+        resetButton.setOnAction(event -> {
+            timeline.stop();
+            startPauseButton.setText("Start");
+            Integer minutes = selectedDuration.get();
+            if (minutes == null) {
+                return;
+            }
+            remainingSeconds[0] = minutes * 60;
+            updateDisplay.run();
+        });
+
+        switchModeButton.setOnAction(event -> {
+            timeline.stop();
+            startPauseButton.setText("Start");
+            workMode[0] = !workMode[0];
+            modeLabel.setText(workMode[0] ? "Work" : "Break");
+            switchModeButton.setText(workMode[0] ? "Switch to Break" : "Switch to Work");
+            Integer minutes = selectedDuration.get();
+            remainingSeconds[0] = minutes == null ? 0 : minutes * 60;
+            updateDisplay.run();
+        });
+
+        closeButton.setOnAction(event -> timerStage.close());
+
+        HBox controls = new HBox(10, startPauseButton, resetButton, switchModeButton, closeButton);
+        controls.setAlignment(Pos.CENTER_LEFT);
+
+        VBox root = new VBox(16, titleLabel, modeLabel, timeLabel, settingsGrid, controls);
+        root.setPadding(new Insets(20));
+        root.setStyle("-fx-background-color: #f6f7fb;");
+
+        timerStage.setOnCloseRequest(event -> timeline.stop());
+        timerStage.setTitle("TimePilot Timer");
+        timerStage.setMinWidth(380);
+        timerStage.setMinHeight(320);
+        timerStage.setScene(new Scene(root, 420, 340));
+        timerStage.show();
+    }
+
+    private Integer parseTimerMinutes(TextField field, String label) {
+        String value = field.getText().trim();
+        if (value.isEmpty()) {
+            showWarning("Please enter " + label + " minutes.");
+            return null;
+        }
+
+        try {
+            int minutes = Integer.parseInt(value);
+            if (minutes <= 0) {
+                showWarning("Timer minutes must be greater than 0.");
+                return null;
+            }
+            return minutes;
+        } catch (NumberFormatException exception) {
+            showWarning("Timer minutes must be a whole number.");
+            return null;
+        }
+    }
+
+    private String formatTimerTime(int totalSeconds) {
+        int minutes = totalSeconds / 60;
+        int seconds = totalSeconds % 60;
+        return String.format(Locale.ENGLISH, "%02d:%02d", minutes, seconds);
+    }
+
+    private void showTimerFinished(String message) {
+        Alert alert = new Alert(Alert.AlertType.INFORMATION);
+        alert.setTitle("TimePilot Timer");
+        alert.setHeaderText(null);
+        alert.setContentText(message);
+        alert.show();
+    }
     private void openCalendarWindow() {
         Stage calendarStage = new Stage();
         LocalDate currentDate = LocalDate.now();
@@ -525,3 +684,5 @@ public class TimePilotApp extends Application {
         launch(args);
     }
 }
+
+
