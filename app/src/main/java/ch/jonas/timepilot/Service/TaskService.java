@@ -4,7 +4,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
-import ch.jonas.timepilot.Model.Task;
+import ch.jonas.timepilot.model.Task;
 
 public class TaskService {
     private static final Path DEFAULT_TASK_FILE = Path.of("data", "tasks.json");

@@ -1,4 +1,4 @@
-package ch.jonas.timepilot.Model;
+package ch.jonas.timepilot.model;
 
 import java.time.LocalDateTime;
 public class Task {

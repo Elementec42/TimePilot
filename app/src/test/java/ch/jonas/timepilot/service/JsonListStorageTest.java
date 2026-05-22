@@ -11,7 +11,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import ch.jonas.timepilot.Model.Task;
+import ch.jonas.timepilot.model.Task;
 
 class JsonListStorageTest {
     @TempDir
