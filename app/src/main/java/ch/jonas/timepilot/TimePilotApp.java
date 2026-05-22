@@ -63,6 +63,11 @@ public class TimePilotApp extends Application {
     private TextField timeField;
     private TextField durationField;
     private CheckBox openOnlyCheckBox;
+    private Label formTitle;
+    private Button addButton;
+    private Button saveButton;
+    private Button cancelEditButton;
+    private Task editingTask;
 
     @Override
     public void start(Stage stage) {
@@ -132,6 +137,7 @@ public class TimePilotApp extends Application {
 
         taskTable.getColumns().add(titleColumn);
         taskTable.getColumns().add(descriptionColumn);
+        taskTable.getColumns().add(goalsColumn);
         taskTable.getColumns().add(dueTimeColumn);
         taskTable.getColumns().add(durationColumn);
         taskTable.getColumns().add(startedColumn);
@@ -141,7 +147,7 @@ public class TimePilotApp extends Application {
     }
 
     private VBox createTaskForm() {
-        Label formTitle = new Label("New Task");
+        formTitle = new Label("New Task");
         formTitle.setStyle("-fx-font-size: 18px; -fx-font-weight: 700; -fx-text-fill: #172033;");
 
         titleField = new TextField();
@@ -185,12 +191,21 @@ public class TimePilotApp extends Application {
         timeGrid.getColumnConstraints().add(labelColumn);
         timeGrid.getColumnConstraints().add(inputColumn);
 
-        Button addButton = new Button("Add");
+        addButton = new Button("Add");
         addButton.setMaxWidth(Double.MAX_VALUE);
         addButton.setDefaultButton(true);
         addButton.setOnAction(event -> addTask());
 
-        VBox form = new VBox(12, formTitle, titleField, descriptionField, goalsField, timeGrid, addButton);
+        saveButton = new Button("Save Changes");
+        saveButton.setOnAction(event -> saveEditedTask());
+
+        cancelEditButton = new Button("Cancel");
+        cancelEditButton.setOnAction(event -> cancelEditingTask());
+
+        HBox formButtons = new HBox(10, addButton, saveButton, cancelEditButton);
+        setEditMode(false);
+
+        VBox form = new VBox(12, formTitle, titleField, descriptionField, goalsField, timeGrid, formButtons);
         form.setPadding(new Insets(16));
         form.setPrefWidth(320);
         form.setMaxWidth(340);
@@ -208,6 +223,9 @@ public class TimePilotApp extends Application {
         Button timerButton = new Button("Timer");
         timerButton.setOnAction(event -> openTimerWindow());
 
+        Button editButton = new Button("Edit");
+        editButton.setOnAction(event -> editSelectedTask());
+
         Button toggleCompletedButton = new Button("Toggle Done");
         toggleCompletedButton.setOnAction(event -> toggleSelectedTaskCompleted());
 
@@ -217,7 +235,7 @@ public class TimePilotApp extends Application {
         HBox spacer = new HBox();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
-        HBox actions = new HBox(10, openOnlyCheckBox, spacer, calendarButton, timerButton, toggleCompletedButton, deleteButton);
+        HBox actions = new HBox(10, openOnlyCheckBox, spacer, calendarButton, timerButton, editButton, toggleCompletedButton, deleteButton);
         actions.setAlignment(Pos.CENTER_LEFT);
         actions.setPadding(new Insets(18, 0, 0, 0));
         return actions;
@@ -252,6 +270,92 @@ public class TimePilotApp extends Application {
         clearForm();
         refreshTasks();
         taskTable.getSelectionModel().select(task);
+    }
+
+
+    private void editSelectedTask() {
+        Task selectedTask = taskTable.getSelectionModel().getSelectedItem();
+        if (selectedTask == null) {
+            return;
+        }
+
+        editingTask = selectedTask;
+        titleField.setText(selectedTask.getTask());
+        descriptionField.setText(selectedTask.getDescription());
+        goalsField.setText(String.join(System.lineSeparator(), selectedTask.getGoals()));
+
+        if (selectedTask.getDueTime() != null) {
+            dueDatePicker.setValue(selectedTask.getDueTime().toLocalDate());
+            timeField.setText(selectedTask.getDueTime().toLocalTime().format(TIME_INPUT_FORMATTER));
+        }
+        durationField.setText(String.valueOf(selectedTask.getExpectedDurationMinutes()));
+        setEditMode(true);
+    }
+
+    private void saveEditedTask() {
+        if (editingTask == null) {
+            return;
+        }
+
+        String title = titleField.getText().trim();
+        if (title.isEmpty()) {
+            showWarning("Please enter a title.");
+            return;
+        }
+
+        LocalDate dueDate = dueDatePicker.getValue();
+        if (dueDate == null) {
+            showWarning("Please select a date.");
+            return;
+        }
+
+        LocalTime time = parseTime();
+        if (time == null) {
+            return;
+        }
+
+        Integer durationMinutes = parseDurationMinutes();
+        if (durationMinutes == null) {
+            return;
+        }
+
+        Task savedTask = editingTask;
+        savedTask.setTask(title);
+        savedTask.setDescription(descriptionField.getText().trim());
+        savedTask.setGoals(parseGoals());
+        savedTask.setDueTime(LocalDateTime.of(dueDate, time));
+        savedTask.setExpectedDurationMinutes(durationMinutes);
+
+        taskService.saveTasks();
+        editingTask = null;
+        clearForm();
+        setEditMode(false);
+        refreshTasks();
+        taskTable.getSelectionModel().select(savedTask);
+    }
+
+    private void cancelEditingTask() {
+        editingTask = null;
+        clearForm();
+        setEditMode(false);
+    }
+
+    private void setEditMode(boolean editing) {
+        if (formTitle != null) {
+            formTitle.setText(editing ? "Edit Task" : "New Task");
+        }
+        if (addButton != null) {
+            addButton.setVisible(!editing);
+            addButton.setManaged(!editing);
+        }
+        if (saveButton != null) {
+            saveButton.setVisible(editing);
+            saveButton.setManaged(editing);
+        }
+        if (cancelEditButton != null) {
+            cancelEditButton.setVisible(editing);
+            cancelEditButton.setManaged(editing);
+        }
     }
 
     private LocalTime parseTime() {
@@ -795,6 +899,8 @@ public class TimePilotApp extends Application {
         launch(args);
     }
 }
+
+
 
 
 
