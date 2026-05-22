@@ -51,6 +51,7 @@ public class TimePilotApp extends Application {
     private static final DateTimeFormatter MONTH_FORMATTER = DateTimeFormatter.ofPattern("MMMM yyyy", Locale.ENGLISH);
     private static final DateTimeFormatter WEEK_RANGE_FORMATTER = DateTimeFormatter.ofPattern("MMM d", Locale.ENGLISH);
     private static final DateTimeFormatter DATE_HEADER_FORMATTER = DateTimeFormatter.ofPattern("EEEE, MMM d, yyyy", Locale.ENGLISH);
+    private static final DateTimeFormatter WEEK_DAY_HEADER_FORMATTER = DateTimeFormatter.ofPattern("EEE M/d", Locale.ENGLISH);
 
     private final TaskService taskService = new TaskService();
     private final ObservableList<Task> visibleTasks = FXCollections.observableArrayList();
@@ -678,22 +679,99 @@ public class TimePilotApp extends Application {
         return calendarGrid;
     }
 
-    private GridPane createWeekCalendarGrid(LocalDate date) {
-        GridPane calendarGrid = createCalendarBaseGrid(1);
-        addWeekdayHeader(calendarGrid);
-
-        Map<LocalDate, List<Task>> tasksByDate = getTasksByDate();
+    private ScrollPane createWeekCalendarGrid(LocalDate date) {
         LocalDate weekStart = startOfWeek(date);
-        for (int index = 0; index < 7; index++) {
-            LocalDate day = weekStart.plusDays(index);
-            VBox dayCell = createCalendarDayCell(day, true, tasksByDate.getOrDefault(day, List.of()));
-            calendarGrid.add(dayCell, index, 1);
+        GridPane weekGrid = new GridPane();
+        weekGrid.setHgap(1);
+        weekGrid.setVgap(1);
+        weekGrid.setStyle("-fx-background-color: #d8dee9;");
+
+        ColumnConstraints timeColumn = new ColumnConstraints();
+        timeColumn.setMinWidth(76);
+        timeColumn.setPrefWidth(76);
+        weekGrid.getColumnConstraints().add(timeColumn);
+
+        for (int column = 0; column < 7; column++) {
+            ColumnConstraints dayColumn = new ColumnConstraints();
+            dayColumn.setPercentWidth(100.0 / 7.0);
+            dayColumn.setHgrow(Priority.ALWAYS);
+            weekGrid.getColumnConstraints().add(dayColumn);
         }
 
-        return calendarGrid;
+        RowConstraints headerRow = new RowConstraints();
+        headerRow.setMinHeight(42);
+        weekGrid.getRowConstraints().add(headerRow);
+
+        Label cornerLabel = new Label("Time");
+        cornerLabel.setMaxWidth(Double.MAX_VALUE);
+        cornerLabel.setAlignment(Pos.CENTER);
+        cornerLabel.setStyle("-fx-background-color: #edf1f7; -fx-font-weight: 700; -fx-text-fill: #3a4252;");
+        weekGrid.add(cornerLabel, 0, 0);
+
+        for (int dayIndex = 0; dayIndex < 7; dayIndex++) {
+            LocalDate day = weekStart.plusDays(dayIndex);
+            Label dayLabel = new Label(day.format(WEEK_DAY_HEADER_FORMATTER));
+            dayLabel.setMaxWidth(Double.MAX_VALUE);
+            dayLabel.setAlignment(Pos.CENTER);
+            dayLabel.setStyle(date.equals(day) ? "-fx-background-color: #dfeaff; -fx-font-weight: 700; -fx-text-fill: #172033;" : "-fx-background-color: #edf1f7; -fx-font-weight: 700; -fx-text-fill: #3a4252;");
+            weekGrid.add(dayLabel, dayIndex + 1, 0);
+        }
+
+        Map<LocalDate, Map<Integer, List<Task>>> tasksByDayAndHour = taskService.getAllTasks().stream()
+                .filter(task -> task.getDueTime() != null)
+                .filter(task -> !task.getDueTime().toLocalDate().isBefore(weekStart))
+                .filter(task -> !task.getDueTime().toLocalDate().isAfter(weekStart.plusDays(6)))
+                .sorted((first, second) -> first.getDueTime().compareTo(second.getDueTime()))
+                .collect(Collectors.groupingBy(
+                        task -> task.getDueTime().toLocalDate(),
+                        Collectors.groupingBy(task -> task.getDueTime().getHour())));
+
+        for (int hour = 0; hour < 24; hour++) {
+            RowConstraints hourRow = new RowConstraints();
+            hourRow.setMinHeight(72);
+            hourRow.setVgrow(Priority.ALWAYS);
+            weekGrid.getRowConstraints().add(hourRow);
+
+            Label hourLabel = new Label(String.format(Locale.ENGLISH, "%02d:00", hour));
+            hourLabel.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
+            hourLabel.setAlignment(Pos.TOP_CENTER);
+            hourLabel.setPadding(new Insets(10, 4, 0, 4));
+            hourLabel.setStyle("-fx-background-color: #f8fafc; -fx-font-weight: 700; -fx-text-fill: #3a4252;");
+            weekGrid.add(hourLabel, 0, hour + 1);
+
+            for (int dayIndex = 0; dayIndex < 7; dayIndex++) {
+                LocalDate day = weekStart.plusDays(dayIndex);
+                List<Task> hourTasks = tasksByDayAndHour
+                        .getOrDefault(day, Map.of())
+                        .getOrDefault(hour, List.of());
+                weekGrid.add(createWeekHourCell(day, hourTasks), dayIndex + 1, hour + 1);
+            }
+        }
+
+        ScrollPane scrollPane = new ScrollPane(weekGrid);
+        scrollPane.setFitToWidth(true);
+        scrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        scrollPane.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
+        return scrollPane;
     }
 
+    private VBox createWeekHourCell(LocalDate date, List<Task> tasks) {
+        VBox taskList = new VBox(5);
+        taskList.setPadding(new Insets(6));
+        taskList.setMinHeight(72);
+        taskList.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
+        taskList.setStyle(date.equals(LocalDate.now()) ? "-fx-background-color: #fbfdff; -fx-border-color: #b8ccff;" : "-fx-background-color: #ffffff; -fx-border-color: #edf1f7;");
 
+        for (Task task : tasks) {
+            Label taskLabel = new Label(formatCalendarTask(task));
+            taskLabel.setWrapText(true);
+            taskLabel.setMaxWidth(Double.MAX_VALUE);
+            taskLabel.setStyle("-fx-background-color: #e7f0ff; -fx-background-radius: 6px; -fx-padding: 5 7; -fx-text-fill: #172033;");
+            taskList.getChildren().add(taskLabel);
+        }
+
+        return taskList;
+    }
     private ScrollPane createDayScheduler(LocalDate date) {
         VBox schedule = new VBox(8);
         schedule.setStyle("-fx-background-color: #d8dee9;");
@@ -899,6 +977,7 @@ public class TimePilotApp extends Application {
         launch(args);
     }
 }
+
 
 
 
