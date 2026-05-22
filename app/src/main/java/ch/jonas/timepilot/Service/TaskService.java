@@ -1,19 +1,35 @@
-package main.java.ch.jonas.timepilot.Service;
+package ch.jonas.timepilot.service;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
 import ch.jonas.timepilot.Model.Task;
 
 public class TaskService {
-    private final List<Task> tasks = new ArrayList<>();
+    private static final Path DEFAULT_TASK_FILE = Path.of("data", "tasks.json");
+
+    private final JsonListStorage<Task> storage = new JsonListStorage<>(Task.class);
+    private final Path taskFile;
+    private final List<Task> tasks;
+
+    public TaskService() {
+        this(DEFAULT_TASK_FILE);
+    }
+
+    public TaskService(Path taskFile) {
+        this.taskFile = taskFile;
+        this.tasks = new ArrayList<>(storage.loadList(taskFile));
+    }
 
     public void addTask(Task task) {
         tasks.add(task);
+        saveTasks();
     }
 
     public void removeTask(Task task) {
         tasks.remove(task);
+        saveTasks();
     }
 
     public List<Task> getAllTasks() {
@@ -25,5 +41,13 @@ public class TaskService {
                 .filter(task -> !task.isCompleted())
                 .toList();
     }
-    
+
+    public void saveTasks() {
+        storage.saveList(tasks, taskFile);
+    }
+
+    public void loadTasks() {
+        tasks.clear();
+        tasks.addAll(storage.loadList(taskFile));
+    }
 }
