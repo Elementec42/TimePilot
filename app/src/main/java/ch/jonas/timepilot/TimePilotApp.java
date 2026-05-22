@@ -50,6 +50,7 @@ public class TimePilotApp extends Application {
     private static final DateTimeFormatter TIME_INPUT_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
     private static final DateTimeFormatter MONTH_FORMATTER = DateTimeFormatter.ofPattern("MMMM yyyy", Locale.ENGLISH);
     private static final DateTimeFormatter WEEK_RANGE_FORMATTER = DateTimeFormatter.ofPattern("MMM d", Locale.ENGLISH);
+    private static final DateTimeFormatter DATE_HEADER_FORMATTER = DateTimeFormatter.ofPattern("EEEE, MMM d, yyyy", Locale.ENGLISH);
 
     private final TaskService taskService = new TaskService();
     private final ObservableList<Task> visibleTasks = FXCollections.observableArrayList();
@@ -485,7 +486,7 @@ public class TimePilotApp extends Application {
         root.setPadding(new Insets(20));
         root.setStyle("-fx-background-color: #f6f7fb;");
 
-        renderCalendar(root, currentDate, false, calendarStage);
+        renderCalendar(root, currentDate, "month", calendarStage);
 
         Scene scene = new Scene(root, 1200, 800);
         calendarStage.setTitle("TimePilot Calendar");
@@ -495,36 +496,67 @@ public class TimePilotApp extends Application {
         calendarStage.show();
     }
 
-    private void renderCalendar(BorderPane root, LocalDate date, boolean weekView, Stage stage) {
-        Label periodLabel = new Label(weekView ? formatWeekRange(date) : YearMonth.from(date).format(MONTH_FORMATTER));
+    private void renderCalendar(BorderPane root, LocalDate date, String view, Stage stage) {
+        Label periodLabel = new Label(formatCalendarPeriod(date, view));
         periodLabel.setStyle("-fx-font-size: 26px; -fx-font-weight: 700; -fx-text-fill: #172033;");
 
         Button previousButton = new Button("Previous");
-        previousButton.setOnAction(event -> renderCalendar(root, weekView ? date.minusWeeks(1) : date.minusMonths(1), weekView, stage));
+        previousButton.setOnAction(event -> renderCalendar(root, shiftCalendarDate(date, view, -1), view, stage));
 
         Button todayButton = new Button("Today");
-        todayButton.setOnAction(event -> renderCalendar(root, LocalDate.now(), weekView, stage));
+        todayButton.setOnAction(event -> renderCalendar(root, LocalDate.now(), view, stage));
 
         Button nextButton = new Button("Next");
-        nextButton.setOnAction(event -> renderCalendar(root, weekView ? date.plusWeeks(1) : date.plusMonths(1), weekView, stage));
+        nextButton.setOnAction(event -> renderCalendar(root, shiftCalendarDate(date, view, 1), view, stage));
 
         Button monthButton = new Button("Month");
-        monthButton.setDisable(!weekView);
-        monthButton.setOnAction(event -> renderCalendar(root, date, false, stage));
+        monthButton.setDisable("month".equals(view));
+        monthButton.setOnAction(event -> renderCalendar(root, date, "month", stage));
 
         Button weekButton = new Button("Week");
-        weekButton.setDisable(weekView);
-        weekButton.setOnAction(event -> renderCalendar(root, date, true, stage));
+        weekButton.setDisable("week".equals(view));
+        weekButton.setOnAction(event -> renderCalendar(root, date, "week", stage));
+
+        Button dayButton = new Button("Day");
+        dayButton.setDisable("day".equals(view));
+        dayButton.setOnAction(event -> renderCalendar(root, date, "day", stage));
 
         Button closeButton = new Button("Close");
         closeButton.setOnAction(event -> stage.close());
 
-        HBox navigation = new HBox(10, previousButton, todayButton, nextButton, monthButton, weekButton, closeButton);
+        HBox navigation = new HBox(10, previousButton, todayButton, nextButton, monthButton, weekButton, dayButton, closeButton);
         HBox top = new HBox(18, periodLabel, navigation);
         top.setAlignment(Pos.CENTER_LEFT);
         top.setPadding(new Insets(0, 0, 18, 0));
         root.setTop(top);
-        root.setCenter(weekView ? createWeekCalendarGrid(date) : createMonthCalendarGrid(YearMonth.from(date)));
+
+        if ("day".equals(view)) {
+            root.setCenter(createDayScheduler(date));
+        } else if ("week".equals(view)) {
+            root.setCenter(createWeekCalendarGrid(date));
+        } else {
+            root.setCenter(createMonthCalendarGrid(YearMonth.from(date)));
+        }
+    }
+
+    private String formatCalendarPeriod(LocalDate date, String view) {
+        if ("day".equals(view)) {
+            return date.format(DATE_HEADER_FORMATTER);
+        }
+        if ("week".equals(view)) {
+            return formatWeekRange(date);
+        }
+        return YearMonth.from(date).format(MONTH_FORMATTER);
+    }
+
+    private LocalDate shiftCalendarDate(LocalDate date, String view, int amount) {
+        if ("day".equals(view)) {
+            return date.plusDays(amount);
+        }
+        if ("week".equals(view)) {
+            return date.plusWeeks(amount);
+        }
+        return date.plusMonths(amount);
     }
 
     private GridPane createMonthCalendarGrid(YearMonth month) {
@@ -555,6 +587,59 @@ public class TimePilotApp extends Application {
         }
 
         return calendarGrid;
+    }
+
+
+    private ScrollPane createDayScheduler(LocalDate date) {
+        VBox schedule = new VBox(8);
+        schedule.setStyle("-fx-background-color: #d8dee9;");
+
+        Map<Integer, List<Task>> tasksByHour = taskService.getAllTasks().stream()
+                .filter(task -> task.getDueTime() != null)
+                .filter(task -> task.getDueTime().toLocalDate().equals(date))
+                .sorted((first, second) -> first.getDueTime().compareTo(second.getDueTime()))
+                .collect(Collectors.groupingBy(task -> task.getDueTime().getHour()));
+
+        for (int hour = 0; hour < 24; hour++) {
+            schedule.getChildren().add(createHourSlot(hour, tasksByHour.getOrDefault(hour, List.of())));
+        }
+
+        ScrollPane scrollPane = new ScrollPane(schedule);
+        scrollPane.setFitToWidth(true);
+        scrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        scrollPane.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
+        return scrollPane;
+    }
+
+    private HBox createHourSlot(int hour, List<Task> tasks) {
+        Label hourLabel = new Label(String.format(Locale.ENGLISH, "%02d:00", hour));
+        hourLabel.setMinWidth(70);
+        hourLabel.setStyle("-fx-font-weight: 700; -fx-text-fill: #3a4252;");
+
+        VBox taskList = new VBox(6);
+        taskList.setMaxWidth(Double.MAX_VALUE);
+        HBox.setHgrow(taskList, Priority.ALWAYS);
+
+        if (tasks.isEmpty()) {
+            Label emptyLabel = new Label("No tasks scheduled");
+            emptyLabel.setStyle("-fx-text-fill: #7b8495;");
+            taskList.getChildren().add(emptyLabel);
+        } else {
+            for (Task task : tasks) {
+                Label taskLabel = new Label(formatCalendarTask(task));
+                taskLabel.setWrapText(true);
+                taskLabel.setMaxWidth(Double.MAX_VALUE);
+                taskLabel.setStyle("-fx-background-color: #e7f0ff; -fx-background-radius: 6px; -fx-padding: 6 8; -fx-text-fill: #172033;");
+                taskList.getChildren().add(taskLabel);
+            }
+        }
+
+        HBox slot = new HBox(12, hourLabel, taskList);
+        slot.setAlignment(Pos.TOP_LEFT);
+        slot.setPadding(new Insets(10));
+        slot.setMinHeight(72);
+        slot.setStyle("-fx-background-color: #ffffff; -fx-border-color: #d8dee9;");
+        return slot;
     }
 
     private GridPane createCalendarBaseGrid(int dayRows) {
@@ -710,6 +795,9 @@ public class TimePilotApp extends Application {
         launch(args);
     }
 }
+
+
+
 
 
 
