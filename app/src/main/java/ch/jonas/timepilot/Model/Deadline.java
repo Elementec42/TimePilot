@@ -3,19 +3,24 @@ package ch.jonas.timepilot.model;
 import java.time.Duration;
 import java.time.LocalDate;
 
-public class Task {
+public class Deadline {
     private String title;
     private String description;
     private LocalDate dueDate;
+    private String subjectOrModule;
     private Duration estimatedWorkDuration;
-    private boolean completed;
 
-    public Task(String title, String description, LocalDate dueDate, Duration estimatedWorkDuration) {
+    public Deadline(
+            String title,
+            String description,
+            LocalDate dueDate,
+            String subjectOrModule,
+            Duration estimatedWorkDuration) {
         setTitle(title);
         setDescription(description);
         setDueDate(dueDate);
+        setSubjectOrModule(subjectOrModule);
         setEstimatedWorkDuration(estimatedWorkDuration);
-        this.completed = false;
     }
 
     public String getTitle() {
@@ -42,6 +47,14 @@ public class Task {
         this.dueDate = ModelValidation.requireDate(dueDate, "dueDate");
     }
 
+    public String getSubjectOrModule() {
+        return subjectOrModule;
+    }
+
+    public void setSubjectOrModule(String subjectOrModule) {
+        this.subjectOrModule = ModelValidation.requireText(subjectOrModule, "subjectOrModule");
+    }
+
     public Duration getEstimatedWorkDuration() {
         return estimatedWorkDuration;
     }
@@ -50,17 +63,5 @@ public class Task {
         this.estimatedWorkDuration = ModelValidation.requireNonNegativeDuration(
                 estimatedWorkDuration,
                 "estimatedWorkDuration");
-    }
-
-    public boolean isCompleted() {
-        return completed;
-    }
-
-    public void markCompleted() {
-        this.completed = true;
-    }
-
-    public void reopen() {
-        this.completed = false;
     }
 }
