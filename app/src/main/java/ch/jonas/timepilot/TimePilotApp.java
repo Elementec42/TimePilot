@@ -85,6 +85,9 @@ public class TimePilotApp extends Application {
     private Button addButton;
     private Button saveButton;
     private Button cancelEditButton;
+    private BorderPane calendarRoot;
+    private LocalDate calendarDate = LocalDate.now();
+    private String calendarView = "month";
     private Task editingTask;
 
     @Override
@@ -92,17 +95,17 @@ public class TimePilotApp extends Application {
         BorderPane root = new BorderPane();
         root.setPadding(new Insets(20));
         root.setTop(createHeader());
-        root.setCenter(createTaskTable());
+        root.setCenter(createMainContent());
         root.setRight(createTaskForm());
         root.setBottom(createActions());
         root.setStyle("-fx-background-color: #f6f7fb;");
 
         refreshTasks();
 
-        Scene scene = new Scene(root, 1060, 680);
+        Scene scene = new Scene(root, 1280, 760);
         stage.setTitle("TimePilot");
-        stage.setMinWidth(920);
-        stage.setMinHeight(600);
+        stage.setMinWidth(1100);
+        stage.setMinHeight(680);
         stage.setScene(scene);
         stage.show();
     }
@@ -117,6 +120,34 @@ public class TimePilotApp extends Application {
         VBox header = new VBox(4, title, subtitle);
         header.setPadding(new Insets(0, 0, 18, 0));
         return header;
+    }
+
+    private VBox createMainContent() {
+        BorderPane calendar = createEmbeddedCalendar();
+        TableView<Task> table = createTaskTable();
+        table.setPrefHeight(210);
+        table.setMinHeight(160);
+
+        Label tableTitle = new Label("Tasks");
+        tableTitle.setStyle("-fx-font-size: 16px; -fx-font-weight: 700; -fx-text-fill: #172033;");
+
+        VBox tableSection = new VBox(8, tableTitle, table);
+        VBox.setVgrow(table, Priority.ALWAYS);
+
+        VBox content = new VBox(14, calendar, tableSection);
+        content.setMinSize(0, 0);
+        VBox.setVgrow(calendar, Priority.ALWAYS);
+        BorderPane.setMargin(content, new Insets(0, 18, 0, 0));
+        return content;
+    }
+
+    private BorderPane createEmbeddedCalendar() {
+        calendarRoot = new BorderPane();
+        calendarRoot.setMinSize(0, 0);
+        calendarRoot.setPrefHeight(430);
+        calendarRoot.setStyle("-fx-background-color: #f6f7fb;");
+        renderCalendar(calendarRoot, calendarDate, calendarView);
+        return calendarRoot;
     }
 
     private TableView<Task> createTaskTable() {
@@ -160,7 +191,6 @@ public class TimePilotApp extends Application {
         taskTable.getColumns().add(dueTimeColumn);
         taskTable.getColumns().add(durationColumn);
         taskTable.getColumns().add(statusColumn);
-        BorderPane.setMargin(taskTable, new Insets(0, 18, 0, 0));
         return taskTable;
     }
 
@@ -243,9 +273,6 @@ public class TimePilotApp extends Application {
         Button todayButton = new Button("Today Plan");
         todayButton.setOnAction(event -> openTodayPlanWindow());
 
-        Button calendarButton = new Button("Calendar");
-        calendarButton.setOnAction(event -> openCalendarWindow());
-
         Button timerButton = new Button("Timer");
         timerButton.setOnAction(event -> openTimerWindow());
 
@@ -258,7 +285,7 @@ public class TimePilotApp extends Application {
         HBox spacer = new HBox();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
-        HBox actions = new HBox(10, openOnlyCheckBox, spacer, todayButton, calendarButton, timerButton, editButton, deleteButton);
+        HBox actions = new HBox(10, openOnlyCheckBox, spacer, todayButton, timerButton, editButton, deleteButton);
         actions.setAlignment(Pos.CENTER_LEFT);
         actions.setPadding(new Insets(18, 0, 0, 0));
         return actions;
@@ -737,59 +764,41 @@ public class TimePilotApp extends Application {
                 new KeyFrame(Duration.millis(700), event -> Toolkit.getDefaultToolkit().beep()));
         alertSound.play();
     }
-    private void openCalendarWindow() {
-        Stage calendarStage = new Stage();
-        LocalDate currentDate = LocalDate.now();
-        BorderPane root = new BorderPane();
-        root.setPadding(new Insets(20));
-        root.setMinSize(0, 0);
-        root.setStyle("-fx-background-color: #f6f7fb;");
+    private void renderCalendar(BorderPane root, LocalDate date, String view) {
+        calendarDate = date;
+        calendarView = view;
 
-        renderCalendar(root, currentDate, "month", calendarStage);
-
-        Scene scene = new Scene(root, 1200, 800);
-        calendarStage.setTitle("TimePilot Calendar");
-        calendarStage.setMinWidth(640);
-        calendarStage.setMinHeight(420);
-        calendarStage.setScene(scene);
-        calendarStage.show();
-    }
-
-    private void renderCalendar(BorderPane root, LocalDate date, String view, Stage stage) {
         boolean weekView = "week".equals(view);
-        root.setPadding(weekView ? new Insets(10) : new Insets(20));
+        root.setPadding(weekView ? new Insets(8) : new Insets(12));
 
         Label periodLabel = new Label(formatCalendarPeriod(date, view));
         periodLabel.setMinSize(0, 0);
         periodLabel.setMaxWidth(Double.MAX_VALUE);
         periodLabel.setTextOverrun(OverrunStyle.ELLIPSIS);
-        periodLabel.setStyle(weekView ? "-fx-font-size: 18px; -fx-font-weight: 700; -fx-text-fill: #172033;" : "-fx-font-size: 26px; -fx-font-weight: 700; -fx-text-fill: #172033;");
+        periodLabel.setStyle(weekView ? "-fx-font-size: 18px; -fx-font-weight: 700; -fx-text-fill: #172033;" : "-fx-font-size: 24px; -fx-font-weight: 700; -fx-text-fill: #172033;");
 
         Button previousButton = new Button("Previous");
-        previousButton.setOnAction(event -> renderCalendar(root, shiftCalendarDate(date, view, -1), view, stage));
+        previousButton.setOnAction(event -> renderCalendar(root, shiftCalendarDate(date, view, -1), view));
 
         Button todayButton = new Button("Today");
-        todayButton.setOnAction(event -> renderCalendar(root, LocalDate.now(), view, stage));
+        todayButton.setOnAction(event -> renderCalendar(root, LocalDate.now(), view));
 
         Button nextButton = new Button("Next");
-        nextButton.setOnAction(event -> renderCalendar(root, shiftCalendarDate(date, view, 1), view, stage));
+        nextButton.setOnAction(event -> renderCalendar(root, shiftCalendarDate(date, view, 1), view));
 
         Button monthButton = new Button("Month");
         monthButton.setDisable("month".equals(view));
-        monthButton.setOnAction(event -> renderCalendar(root, date, "month", stage));
+        monthButton.setOnAction(event -> renderCalendar(root, date, "month"));
 
         Button weekButton = new Button("Week");
         weekButton.setDisable("week".equals(view));
-        weekButton.setOnAction(event -> renderCalendar(root, date, "week", stage));
+        weekButton.setOnAction(event -> renderCalendar(root, date, "week"));
 
         Button dayButton = new Button("Day");
         dayButton.setDisable("day".equals(view));
-        dayButton.setOnAction(event -> renderCalendar(root, date, "day", stage));
+        dayButton.setOnAction(event -> renderCalendar(root, date, "day"));
 
-        Button closeButton = new Button("Close");
-        closeButton.setOnAction(event -> stage.close());
-
-        FlowPane navigation = new FlowPane(8, 6, previousButton, todayButton, nextButton, monthButton, weekButton, dayButton, closeButton);
+        FlowPane navigation = new FlowPane(8, 6, previousButton, todayButton, nextButton, monthButton, weekButton, dayButton);
         navigation.setAlignment(Pos.CENTER_LEFT);
         navigation.setMinSize(0, 0);
         navigation.setMaxWidth(Double.MAX_VALUE);
@@ -1261,6 +1270,9 @@ public class TimePilotApp extends Application {
                 ? taskService.getOpenTasks()
                 : taskService.getAllTasks();
         visibleTasks.setAll(tasks);
+        if (calendarRoot != null) {
+            renderCalendar(calendarRoot, calendarDate, calendarView);
+        }
     }
 
     private void clearForm() {
