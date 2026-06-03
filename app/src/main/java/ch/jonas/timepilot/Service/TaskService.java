@@ -1,9 +1,9 @@
-package main.java.ch.jonas.timepilot.Service;
+package ch.jonas.timepilot.service;
 
 import java.util.ArrayList;
 import java.util.List;
 
-import ch.jonas.timepilot.Model.Task;
+import ch.jonas.timepilot.model.Task;
 
 public class TaskService {
     private final List<Task> tasks = new ArrayList<>();
