@@ -1,6 +1,7 @@
 package ch.jonas.timepilot;
 
 import ch.jonas.timepilot.ui.MainView;
+import ch.jonas.timepilot.ui.PlanningController;
 import javafx.application.Application;
 import javafx.scene.Scene;
 import javafx.stage.Stage;
@@ -12,7 +13,7 @@ public class App extends Application {
 
     @Override
     public void start(Stage stage) {
-        Scene scene = new Scene(new MainView().create(), 1100, 720);
+        Scene scene = new Scene(new MainView(PlanningController.createDefault()).create(), 1100, 720);
         stage.setTitle(getApplicationName());
         stage.setMinWidth(900);
         stage.setMinHeight(600);

@@ -1,6 +1,7 @@
 package ch.jonas.timepilot.ui;
 
 import java.util.List;
+import java.util.Objects;
 
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -27,6 +28,11 @@ public class MainView {
     private final StackPane contentPane = new StackPane();
     private final Label titleLabel = new Label();
     private final Label subtitleLabel = new Label();
+    private final PlanningController planningController;
+
+    public MainView(PlanningController planningController) {
+        this.planningController = Objects.requireNonNull(planningController, "planningController must not be null");
+    }
 
     public BorderPane create() {
         root.setStyle("-fx-background-color: " + BACKGROUND + ";");
@@ -116,19 +122,10 @@ public class MainView {
 
     private Node createSectionContent(Section section) {
         return switch (section) {
-            case TASKS -> createListPlaceholder(
-                    "Tasks",
-                    "Task list and entry form will appear here in the next milestone.",
-                    List.of("Open tasks", "Completed tasks", "Estimated work time"));
-            case DEADLINES -> createListPlaceholder(
-                    "Deadlines",
-                    "Deadline entry and tracking will appear here in the next milestone.",
-                    List.of("Upcoming deadlines", "Subject or module", "Required work time"));
-            case EXAMS -> createListPlaceholder(
-                    "Exams",
-                    "Exam entry and priority tracking will appear here in the next milestone.",
-                    List.of("Exam dates", "Study time estimates", "Priority"));
-            case CALENDAR -> createCalendarPlaceholder();
+            case TASKS -> new TaskView(planningController).create();
+            case DEADLINES -> new DeadlineView(planningController).create();
+            case EXAMS -> new ExamView(planningController).create();
+            case CALENDAR -> new CalendarOverviewView(planningController).create();
         };
     }
 
