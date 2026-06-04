@@ -6,10 +6,12 @@ import java.time.LocalDate;
 import java.util.Objects;
 
 import ch.jonas.timepilot.model.Deadline;
+import ch.jonas.timepilot.model.CalendarBlock;
 import ch.jonas.timepilot.model.Exam;
 import ch.jonas.timepilot.model.ExamPriority;
 import ch.jonas.timepilot.model.StudySession;
 import ch.jonas.timepilot.model.Task;
+import ch.jonas.timepilot.service.CalendarService;
 import ch.jonas.timepilot.service.DeadlineService;
 import ch.jonas.timepilot.service.ExamService;
 import ch.jonas.timepilot.service.StudySessionService;
@@ -173,6 +175,59 @@ public class PlanningController {
         persistAndRefresh();
     }
 
+    public void addStudySession(
+            String title,
+            String subjectOrModule,
+            LocalDate startDate,
+            int startHour,
+            int startMinute,
+            int endHour,
+            int endMinute,
+            String notes) {
+        StudySession studySession = new StudySession(
+                title,
+                subjectOrModule,
+                startDate.atTime(startHour, startMinute),
+                startDate.atTime(endHour, endMinute),
+                notes);
+        validateStudySessionTime(studySession, null);
+        studySessionService.addStudySession(studySession);
+        persistAndRefresh();
+    }
+
+    public void updateStudySession(
+            StudySession studySession,
+            String title,
+            String subjectOrModule,
+            LocalDate startDate,
+            int startHour,
+            int startMinute,
+            int endHour,
+            int endMinute,
+            String notes) {
+        StudySession updatedStudySession = new StudySession(
+                title,
+                subjectOrModule,
+                startDate.atTime(startHour, startMinute),
+                startDate.atTime(endHour, endMinute),
+                notes);
+        validateStudySessionTime(updatedStudySession, studySession);
+        studySessionService.editStudySession(studySession, managedStudySession -> {
+            managedStudySession.setTitle(title);
+            managedStudySession.setSubjectOrModule(subjectOrModule);
+            managedStudySession.setTimeRange(
+                    startDate.atTime(startHour, startMinute),
+                    startDate.atTime(endHour, endMinute));
+            managedStudySession.setNotes(notes);
+        });
+        persistAndRefresh();
+    }
+
+    public void removeStudySession(StudySession studySession) {
+        studySessionService.removeStudySession(studySession);
+        persistAndRefresh();
+    }
+
     private void load() {
         PlanningData data = dataStore.load();
         data.getTasks().forEach(taskService::addTask);
@@ -196,5 +251,14 @@ public class PlanningController {
         deadlines.setAll(deadlineService.listDeadlines());
         exams.setAll(examService.listExams());
         studySessions.setAll(studySessionService.listStudySessions());
+    }
+
+    private void validateStudySessionTime(StudySession candidate, StudySession ignoredStudySession) {
+        CalendarService calendarService = new CalendarService();
+        studySessionService.listStudySessions().stream()
+                .filter(studySession -> studySession != ignoredStudySession)
+                .map(CalendarBlock::forStudySession)
+                .forEach(calendarService::addBlock);
+        calendarService.addBlock(CalendarBlock.forStudySession(candidate));
     }
 }

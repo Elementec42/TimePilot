@@ -125,7 +125,7 @@ public class MainView {
             case TASKS -> new TaskView(planningController).create();
             case DEADLINES -> new DeadlineView(planningController).create();
             case EXAMS -> new ExamView(planningController).create();
-            case CALENDAR -> new CalendarOverviewView(planningController).create();
+            case CALENDAR -> new CalendarView(planningController).create();
         };
     }
 

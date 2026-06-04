@@ -181,7 +181,7 @@ public class DeadlineView {
     }
 
     private void addField(GridPane fields, String label, Node field, int row) {
-        fields.add(new Label(label), 0, row);
+        fields.add(UiStyles.formLabel(label), 0, row);
         fields.add(field, 1, row);
         GridPane.setHgrow(field, Priority.ALWAYS);
     }
