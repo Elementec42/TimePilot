@@ -23,6 +23,7 @@ import javafx.scene.control.Spinner;
 import javafx.scene.control.SpinnerValueFactory;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
+import javafx.scene.Cursor;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.ColumnConstraints;
@@ -40,6 +41,7 @@ public class CalendarView {
     private static final double MINUTE_HEIGHT = HOUR_HEIGHT / 60.0;
     private static final double DAY_WIDTH = 132;
     private static final DateTimeFormatter DAY_FORMATTER = DateTimeFormatter.ofPattern("EEE dd.MM.");
+    private static final DateTimeFormatter WEEK_RANGE_FORMATTER = DateTimeFormatter.ofPattern("dd.MM.yyyy");
 
     private final PlanningController controller;
     private final GridPane calendarGrid = new GridPane();
@@ -57,6 +59,8 @@ public class CalendarView {
 
     private LocalDate weekStart = LocalDate.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
     private StudySession selectedStudySession;
+    private DragState dragState;
+    private boolean suppressNextBlockClick;
 
     public CalendarView(PlanningController controller) {
         this.controller = controller;
@@ -153,7 +157,9 @@ public class CalendarView {
         calendarGrid.getRowConstraints().clear();
         dayPanes.clear();
 
-        weekLabel.setText(weekStart + " - " + weekStart.plusDays(6));
+        weekLabel.setText(weekStart.format(WEEK_RANGE_FORMATTER)
+                + " - "
+                + weekStart.plusDays(6).format(WEEK_RANGE_FORMATTER));
 
         ColumnConstraints timeColumn = new ColumnConstraints(64);
         calendarGrid.getColumnConstraints().add(timeColumn);
@@ -240,9 +246,19 @@ public class CalendarView {
         block.setPrefHeight(visibleHeight);
         block.setStyle("-fx-background-color: #2f6fd6; -fx-background-radius: 6;"
                 + " -fx-text-fill: white; -fx-font-size: 12px; -fx-font-weight: 700;");
+        block.setOnMouseMoved(event -> updateBlockCursor(block, event));
+        block.setOnMousePressed(event -> startBlockDrag(studySession, block, event));
+        block.setOnMouseDragged(event -> previewBlockDrag(block, event));
+        block.setOnMouseReleased(event -> finishBlockDrag(event));
         block.setOnMouseClicked(event -> {
             event.consume();
-            showStudySession(studySession);
+            if (suppressNextBlockClick) {
+                suppressNextBlockClick = false;
+                return;
+            }
+            if (dragState == null || !dragState.dragged) {
+                showStudySession(studySession);
+            }
         });
         dayPanes.get(dayIndex).getChildren().add(block);
     }
@@ -306,10 +322,146 @@ public class CalendarView {
     }
 
     private LocalTime timeFromY(double y) {
+        return timeFromY(y, false);
+    }
+
+    private LocalTime timeFromY(double y, boolean allowEndOfDay) {
         int minutesFromStart = Math.max(0, (int) Math.round(y / MINUTE_HEIGHT / 15.0) * 15);
-        int maxMinutes = (END_HOUR - START_HOUR) * 60 - 15;
+        int maxMinutes = (END_HOUR - START_HOUR) * 60;
+        if (!allowEndOfDay) {
+            maxMinutes -= 15;
+        }
         minutesFromStart = Math.min(minutesFromStart, maxMinutes);
         return LocalTime.of(START_HOUR, 0).plusMinutes(minutesFromStart);
+    }
+
+    private void updateBlockCursor(Label block, MouseEvent event) {
+        if (isResizeArea(block, event)) {
+            block.setCursor(Cursor.S_RESIZE);
+        } else {
+            block.setCursor(Cursor.HAND);
+        }
+    }
+
+    private void startBlockDrag(StudySession studySession, Label block, MouseEvent event) {
+        event.consume();
+        showStudySession(studySession);
+        boolean resizing = isResizeArea(block, event);
+        dragState = new DragState(
+                studySession,
+                resizing ? DragMode.RESIZE : DragMode.MOVE,
+                event.getSceneY(),
+                event.getY(),
+                block.getLayoutY(),
+                block.getPrefHeight());
+        block.setOpacity(0.78);
+    }
+
+    private void previewBlockDrag(Label block, MouseEvent event) {
+        if (dragState == null) {
+            return;
+        }
+        event.consume();
+        dragState.dragged = true;
+
+        if (dragState.mode == DragMode.MOVE) {
+            Pane targetPane = findDayPane(event.getSceneX());
+            if (targetPane == null) {
+                targetPane = (Pane) block.getParent();
+            }
+            double localY = targetPane.sceneToLocal(event.getSceneX(), event.getSceneY()).getY() - dragState.mouseYOffset;
+            double maxY = targetPane.getPrefHeight() - block.getPrefHeight();
+            block.setLayoutY(clamp(localY, 0, maxY));
+        } else {
+            double height = dragState.originalHeight + event.getSceneY() - dragState.pressSceneY;
+            double maxHeight = ((Pane) block.getParent()).getPrefHeight() - dragState.originalLayoutY - 4;
+            block.setPrefHeight(clamp(height, 24, maxHeight));
+        }
+    }
+
+    private void finishBlockDrag(MouseEvent event) {
+        if (dragState == null) {
+            return;
+        }
+        event.consume();
+
+        DragState finishedDrag = dragState;
+        dragState = null;
+
+        if (!finishedDrag.dragged) {
+            renderCalendar();
+            return;
+        }
+        suppressNextBlockClick = true;
+
+        try {
+            if (finishedDrag.mode == DragMode.MOVE) {
+                moveStudySession(finishedDrag, event);
+            } else {
+                resizeStudySession(finishedDrag, event);
+            }
+            showMessage("Updated.", false);
+        } catch (RuntimeException exception) {
+            showMessage(exception.getMessage(), true);
+            renderCalendar();
+        }
+    }
+
+    private void moveStudySession(DragState finishedDrag, MouseEvent event) {
+        StudySession studySession = finishedDrag.studySession;
+        Pane targetPane = findDayPane(event.getSceneX());
+        if (targetPane == null) {
+            targetPane = dayPanes.get(dayIndexForDate(studySession.getStartDateTime().toLocalDate()));
+        }
+
+        LocalDate targetDate = dateForDayPane(targetPane);
+        double targetY = targetPane.sceneToLocal(event.getSceneX(), event.getSceneY()).getY() - finishedDrag.mouseYOffset;
+        LocalTime startTime = timeFromY(targetY);
+        LocalTime endTime = startTime.plus(studySession.getDuration());
+        if (endTime.isAfter(LocalTime.of(END_HOUR, 0))) {
+            endTime = LocalTime.of(END_HOUR, 0);
+            startTime = endTime.minus(studySession.getDuration());
+        }
+
+        controller.updateStudySession(
+                studySession,
+                studySession.getTitle(),
+                studySession.getSubjectOrModule(),
+                targetDate,
+                startTime.getHour(),
+                startTime.getMinute(),
+                endTime.getHour(),
+                endTime.getMinute(),
+                studySession.getNotes());
+        showStudySession(studySession);
+    }
+
+    private void resizeStudySession(DragState finishedDrag, MouseEvent event) {
+        StudySession studySession = finishedDrag.studySession;
+        double bottomY = finishedDrag.originalLayoutY
+                + finishedDrag.originalHeight
+                + event.getSceneY()
+                - finishedDrag.pressSceneY;
+        LocalTime endTime = timeFromY(bottomY, true);
+        LocalTime startTime = studySession.getStartDateTime().toLocalTime();
+        if (!endTime.isAfter(startTime)) {
+            endTime = startTime.plusMinutes(15);
+        }
+        if (endTime.isAfter(LocalTime.of(END_HOUR, 0))) {
+            endTime = LocalTime.of(END_HOUR, 0);
+        }
+
+        controller.updateStudySession(
+                studySession,
+                studySession.getTitle(),
+                studySession.getSubjectOrModule(),
+                studySession.getStartDateTime().toLocalDate(),
+                startTime.getHour(),
+                startTime.getMinute(),
+                endTime.getHour(),
+                endTime.getMinute(),
+                studySession.getNotes());
+        showStudySession(studySession);
     }
 
     private void showStudySession(StudySession studySession) {
@@ -397,5 +549,70 @@ public class CalendarView {
     private void showMessage(String message, boolean error) {
         messageLabel.setText(message);
         messageLabel.setStyle("-fx-text-fill: " + (error ? "#c72f2f" : UiStyles.TEXT_MUTED) + ";");
+    }
+
+    private boolean isResizeArea(Label block, MouseEvent event) {
+        return event.getY() >= block.getHeight() - 10;
+    }
+
+    private Pane findDayPane(double sceneX) {
+        return dayPanes.stream()
+                .filter(dayPane -> {
+                    double minX = dayPane.localToScene(dayPane.getBoundsInLocal()).getMinX();
+                    double maxX = dayPane.localToScene(dayPane.getBoundsInLocal()).getMaxX();
+                    return sceneX >= minX && sceneX <= maxX;
+                })
+                .findFirst()
+                .orElse(null);
+    }
+
+    private LocalDate dateForDayPane(Pane dayPane) {
+        int dayIndex = dayPanes.indexOf(dayPane);
+        if (dayIndex < 0) {
+            return weekStart;
+        }
+        return weekStart.plusDays(dayIndex);
+    }
+
+    private int dayIndexForDate(LocalDate date) {
+        int dayIndex = (int) Duration.between(weekStart.atStartOfDay(), date.atStartOfDay()).toDays();
+        return Math.max(0, Math.min(dayIndex, dayPanes.size() - 1));
+    }
+
+    private double clamp(double value, double minimum, double maximum) {
+        if (maximum < minimum) {
+            return minimum;
+        }
+        return Math.max(minimum, Math.min(value, maximum));
+    }
+
+    private enum DragMode {
+        MOVE,
+        RESIZE
+    }
+
+    private static final class DragState {
+        private final StudySession studySession;
+        private final DragMode mode;
+        private final double pressSceneY;
+        private final double mouseYOffset;
+        private final double originalLayoutY;
+        private final double originalHeight;
+        private boolean dragged;
+
+        private DragState(
+                StudySession studySession,
+                DragMode mode,
+                double pressSceneY,
+                double mouseYOffset,
+                double originalLayoutY,
+                double originalHeight) {
+            this.studySession = studySession;
+            this.mode = mode;
+            this.pressSceneY = pressSceneY;
+            this.mouseYOffset = mouseYOffset;
+            this.originalLayoutY = originalLayoutY;
+            this.originalHeight = originalHeight;
+        }
     }
 }
